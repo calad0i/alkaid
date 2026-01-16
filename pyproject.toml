@@ -1,0 +1,66 @@
+[build-system]
+build-backend = "mesonpy"
+
+requires = [
+  "meson-python>=0.13.1",
+  "nanobind>=2.9.2",
+  "numpy>=2",
+  "typing-extensions; python_version<'3.11'",
+]
+
+[project]
+name = "alkaid"
+description = "Alkaid: A Library for Kernel Accelerator Implementation on Device"
+readme = "README.md"
+keywords = [
+  "CMVM",
+  "distributed arithmetic",
+  "high-level synthesis",
+  "machine learning",
+  "RTL/HLS compilation",
+]
+
+license = { text = "Affero GNU General Public License v3" }
+authors = [ { name = "Chang Sun", email = "chsun@cern.ch" } ]
+requires-python = ">=3.10"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: GNU Affero General Public License v3",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dynamic = [ "version" ]
+dependencies = [ "llvmlite>=0.44", "numba>=0.61", "quantizers>=1,<2" ]
+optional-dependencies.docs = [
+  "hgq2",
+  "myst-parser",
+  "pyparsing",
+  "sphinx",
+  "sphinx-rtd-theme",
+]
+urls.repository = "https://github.com/calad0i/alkaid"
+scripts.da4ml = "da4ml._cli:main"
+
+[tool.ruff]
+target-version = "py310"
+
+line-length = 130
+indent-width = 4
+
+include = [ "src/**/*.py" ]
+
+format.indent-style = "space"
+format.quote-style = "single"
+format.skip-magic-trailing-comma = false
+format.docstring-code-line-length = 130
+format.docstring-code-format = true
+lint.select = [ "E", "F", "F401", "I", "W" ]
+lint.ignore = [ "E501", "E731", "E741", "F403", "F405" ]
+lint.explicit-preview-rules = true
+lint.fixable = [ "ALL" ]
+lint.unfixable = [  ]

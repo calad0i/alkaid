@@ -1,0 +1,91 @@
+name: Upload Python Package to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest] # Windows ci build is broken for now. Reason unknown...
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.3.0
+        env:
+          CIBW_BUILD: "cp31[0-3]-*" # numba for py314 stable is not yet available; wait for it
+          CIBW_ARCHS_LINUX: "x86_64"
+          CIBW_ARCHS_WINDOWS: "AMD64"
+          CIBW_ARCHS_MACOS: "arm64"
+          CIBW_SKIP: "*-musllinux_*"
+          CIBW_TEST_COMMAND: "python -c 'import da4ml; print(da4ml.__version__)'"
+
+          # macOS specific environment for OpenMP
+          CIBW_BEFORE_BUILD_MACOS: "brew install libomp"
+          CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=15.0"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: cibw-wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build Source Distribution
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install build tool
+        run: pip install build
+
+      - name: Build source distribution
+        run: python -m build --sdist --outdir dist
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: sdist
+          path: ./dist/*.tar.gz
+
+  publish:
+    name: Publish wheels to PyPI
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    environment:
+      name: pypi
+      url: https://pypi.org/p/da4ml
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: cibw-wheels-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v5
+        with:
+          name: sdist
+
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@release/v1
