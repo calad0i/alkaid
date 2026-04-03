@@ -33,7 +33,7 @@ jobs:
           pip install --no-build-isolation -e '.[tests]'
 
       - name: Run tests
-        run: pytest tests/ --import-mode=importlib -n4 --cov=src/da4ml --cov-report=xml
+        run: pytest tests/ --import-mode=importlib -n4 --cov=src/alkaid --cov-report=xml
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v5

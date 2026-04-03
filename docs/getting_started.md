@@ -1,18 +1,18 @@
-# Getting Started with da4ml
+# Getting Started with alkaid
 
-da4ml can be used in multiple ways. When standalone code generation, it is recommended to use the functional API or HGQ2 integration. See [FAQ](faq.md) for more details on when to use which flow.
+alkaid can be used in multiple ways. When standalone code generation, it is recommended to use the functional API or HGQ2 integration. See [FAQ](faq.md) for more details on when to use which flow.
 
 ## functional API:
 
-The most flexible way to use da4ml is through its functional API/Explicit symbolic tracing. This allows users to define arbitrary operations using numpy-like syntax, and then trace the operations to generate synthesizable HDL or HLS code.
+The most flexible way to use alkaid is through its functional API/Explicit symbolic tracing. This allows users to define arbitrary operations using numpy-like syntax, and then trace the operations to generate synthesizable HDL or HLS code.
 
 ```python
-# da4ml standalone example
+# alkaid standalone example
 import numpy as np
 
-from da4ml.trace import FixedVariableArrayInput, comb_trace
-from da4ml.trace.ops import einsum, quantize, relu
-from da4ml.codegen import HLSModel, RTLModel
+from alkaid.trace import FixedVariableArrayInput, comb_trace
+from alkaid.trace.ops import einsum, quantize, relu
+from alkaid.codegen import HLSModel, RTLModel
 
 w = np.random.randint(-2**7, 2**7, (4, 5, 6)) / 2**7
 
@@ -49,23 +49,23 @@ rtl_model.write()
 
 ## Using external plugins:
 
-da4ml supports a plugin system for external frameworks. A plugin can implement the logic for tracing models defined in a specific framework (e.g., Keras3/HGQ2, PyTorch, etc.) and register itself under the `dais_tracer.plugins` entry point. When tracing a model, da4ml will automatically discover the appropriate plugin based on the model type and use it for tracing. See [Conversion Plugin](plugin.md) for more details. Below are some examples.
+alkaid supports a plugin system for external frameworks. A plugin can implement the logic for tracing models defined in a specific framework (e.g., Keras3/HGQ2, PyTorch, etc.) and register itself under the `dais_tracer.plugins` entry point. When tracing a model, alkaid will automatically discover the appropriate plugin based on the model type and use it for tracing. See [Conversion Plugin](plugin.md) for more details. Below are some examples.
 
 
 ## HGQ2/Keras3 integration:
 
-For models defined in [HGQ2](https://github.com/calad0i/HGQ2) (Keras3 based), da4ml can trace the model operations automatically when the supported layers/operations are used (i.e., most HGQ2 layers without general non-linear activations). In this way, one can easily convert existing HGQ2 models to HDL or HLS code in seconds. The plugin is built-in in HGQ2, so installing HGQ2 is sufficient to enable the integration. No additional configuration is needed.
+For models defined in [HGQ2](https://github.com/calad0i/HGQ2) (Keras3 based), alkaid can trace the model operations automatically when the supported layers/operations are used (i.e., most HGQ2 layers without general non-linear activations). In this way, one can easily convert existing HGQ2 models to HDL or HLS code in seconds. The plugin is built-in in HGQ2, so installing HGQ2 is sufficient to enable the integration. No additional configuration is needed.
 
-> **Note**: HGQ2 support requires installing the [HGQ2](https://github.com/calad0i/HGQ2) package separately. HGQ2 registers its own `dais_tracer.plugins` entry point under the `keras` key, which da4ml discovers automatically. `trace_model()` auto-detects the framework from `type(model).__module__.split('.', 1)[0]`, so a Keras model resolves to `'keras'` and the HGQ2 plugin is used. See [Conversion Plugin](plugin.md) for how the plugin system works.
+> **Note**: HGQ2 support requires installing the [HGQ2](https://github.com/calad0i/HGQ2) package separately. HGQ2 registers its own `dais_tracer.plugins` entry point under the `keras` key, which alkaid discovers automatically. `trace_model()` auto-detects the framework from `type(model).__module__.split('.', 1)[0]`, so a Keras model resolves to `'keras'` and the HGQ2 plugin is used. See [Conversion Plugin](plugin.md) for how the plugin system works.
 
 ```python
-# da4ml with HGQ2
+# alkaid with HGQ2
 import numpy as np
 import keras
 from hgq.layers import QEinsumDenseBatchnorm, QMaxPool1D
-from da4ml.codegen import HLSModel, RTLModel
-from da4ml.converter import trace_model
-from da4ml.trace import comb_trace
+from alkaid.codegen import HLSModel, RTLModel
+from alkaid.converter import trace_model
+from alkaid.trace import comb_trace
 
 inp = keras.Input((4, 5))
 out = QEinsumDenseBatchnorm('bij,jk->bik', (4,6), bias_axes='k', activation='relu')(inp)
@@ -90,7 +90,7 @@ comb_logic = comb_trace(inp, out)
 `RTLModel` generates synthesizable RTL and wraps a compiled simulation emulator for bit-accurate inference:
 
 ```python
-from da4ml.codegen import RTLModel
+from alkaid.codegen import RTLModel
 
 # flavor='verilog' uses Verilator for simulation;
 # 'vhdl' uses GHDL and Verilator chained (GHDL for VHDL to Verilog conversion, then Verilator for simulation)
@@ -107,7 +107,7 @@ The generated project includes TCL build scripts for Vivado (`build_vivado_prj.t
 `HLSModel` generates HLS C++ code and wraps a compiled emulator:
 
 ```python
-from da4ml.codegen import HLSModel
+from alkaid.codegen import HLSModel
 
 # flavor='vitis' (ap_types), 'hlslib' (ac_types/Intel), or 'oneapi'
 hls_model = HLSModel(comb_logic, '/tmp/hls', flavor='vitis', clock_period=5.0)
@@ -129,7 +129,7 @@ Note: only `CombLogic` is supported for HLS backends; `Pipeline` is not.
 For generating Verilog through [XLS](https://google.github.io/xls/), an experimental backend is available. This requires the `pyxls` package (experimental) to be installed separately.
 
 ```python
-from da4ml.codegen.xls import XLSModel
+from alkaid.codegen.xls import XLSModel
 
 xls_model = XLSModel(comb_logic) # Converts DAIS to XLS IR.
 _ = xls_model.jit() # JIT-compile the XLS IR
@@ -139,27 +139,27 @@ verilog_text = xls_model.compile('/tmp/xls_output.v')
 
 ## CLI usage:
 
-da4ml provides a command-line interface for common workflows:
+alkaid provides a command-line interface for common workflows:
 
 ```bash
 # Convert a Keras/HGQ2 model to an RTL project
-da4ml convert model.keras /tmp/rtl_output --flavor verilog --latency-cutoff 5
+alkaid convert model.keras /tmp/rtl_output --flavor verilog --latency-cutoff 5
 
 # Convert a serialized DAIS model (JSON) to an RTL project
-da4ml convert model.json /tmp/rtl_output --flavor vhdl
+alkaid convert model.json /tmp/rtl_output --flavor vhdl
 
 # Generate a resource/timing report from an existing RTL project
-da4ml report /tmp/rtl_output
+alkaid report /tmp/rtl_output
 ```
 
-Use `da4ml convert --help` and `da4ml report --help` for full option details.
+Use `alkaid convert --help` and `alkaid report --help` for full option details.
 
 ## hls4ml integration:
 
-For existing uses of [hls4ml](https://github.com/fastmachinelearning/hls4ml), da4ml can be used as a strategy provider to enable the `distributed_arithmetic` strategy for supported layers (e.g., Dense, Conv, EinsumDense). This leverages the HLS codegen backend in da4ml to generate only the CMVM part of the design, while still using hls4ml for the rest of the design and integration. For any design aiming for `II>1` (i.e., not-fully unrolled), this is the recommended way to use da4ml.
+For existing uses of [hls4ml](https://github.com/fastmachinelearning/hls4ml), alkaid can be used as a strategy provider to enable the `distributed_arithmetic` strategy for supported layers (e.g., Dense, Conv, EinsumDense). This leverages the HLS codegen backend in alkaid to generate only the CMVM part of the design, while still using hls4ml for the rest of the design and integration. For any design aiming for `II>1` (i.e., not-fully unrolled), this is the recommended way to use alkaid.
 
 ```python
-# da4ml with hls4ml
+# alkaid with hls4ml
 from hls4ml.converters import convert_from_keras_model
 
 model_hls = convert_from_keras_model(

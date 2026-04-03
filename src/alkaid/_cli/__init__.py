@@ -6,7 +6,7 @@ from .report import _add_report_args, report_main
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Welcome to the da4ml command line interface')
+    parser = argparse.ArgumentParser(description='Welcome to the alkaid command line interface')
     subparsers = parser.add_subparsers(dest='command')
 
     convert_parser = subparsers.add_parser('convert', help='Convert a Keras model to RTL project')

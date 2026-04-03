@@ -4,11 +4,11 @@ import subprocess
 import numpy as np
 import pytest
 
-from da4ml.codegen import HLSModel, RTLModel
-from da4ml.trace import FixedVariableArray, comb_trace
-from da4ml.trace.ops import quantize, relu
-from da4ml.trace.passes import optimize
-from da4ml.types import CombLogic
+from alkaid.codegen import HLSModel, RTLModel
+from alkaid.trace import FixedVariableArray, trace
+from alkaid.trace.ops import quantize, relu
+from alkaid.trace.passes import optimize
+from alkaid.types import CombLogic
 
 
 class OperationTest:
@@ -28,7 +28,7 @@ class OperationTest:
     @pytest.fixture()
     def _comb(self, op_func, inp: FixedVariableArray):
         out = quantize(op_func(inp), 1, 12, 12)
-        comb = comb_trace(inp, out, optimize=False)
+        comb = trace(inp, out, optimize=False)
         return comb
 
     @pytest.fixture()
@@ -60,7 +60,7 @@ class OperationTest:
     def test_retrace(self, comb: CombLogic, _comb: CombLogic):
         inp2 = FixedVariableArray.from_kif(*comb.inp_kifs).as_new()
         out2 = comb(inp2, debug=True, quantize=True)
-        comb2 = comb_trace(inp2, out2)
+        comb2 = trace(inp2, out2)
         if not comb == comb2:
             comb.save('/tmp/1.json')
             comb2.save('/tmp/2.json')
@@ -120,7 +120,7 @@ class OperationTestSynth(OperationTest):
         subprocess.run(['rm', '-rf', temp_directory])
 
     def test_xls_gen(self, comb: CombLogic, temp_directory: str, test_data: np.ndarray):
-        from da4ml.codegen.xls import XLSModel
+        from alkaid.codegen.xls import XLSModel
 
         if np.sum(comb.out_kifs) == 0 or np.sum(comb.inp_kifs) == 0:
             return  # By chance, the comb logic is trivial/invalid.

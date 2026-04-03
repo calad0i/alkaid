@@ -9,14 +9,14 @@
 import os
 import sys
 
-import da4ml
+import alkaid
 
 sys.path.insert(0, os.path.abspath('../'))
 
-project = 'da4ml'
+project = 'alkaid'
 copyright = '2025-2026, Chang Sun'
 author = 'Chang Sun'
-release = str(da4ml.__version__)
+release = str(alkaid.__version__)
 version = release
 
 # -- General configuration ---------------------------------------------------
@@ -63,7 +63,7 @@ html_theme_options = {
 html_context = {
     'display_github': True,  # Integrate GitHub
     'github_user': 'calad0i',  # Username
-    'github_repo': 'da4ml',  # Repo name
+    'github_repo': 'alkaid',  # Repo name
     'github_version': 'master',  # Version
     'conf_py_path': '/docs/',  # Path in the checkout to the docs root
 }

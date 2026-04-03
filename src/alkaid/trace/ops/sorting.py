@@ -44,7 +44,7 @@ def _bitonic_sort(a: 'NDArray', ascending: bool):
 
 def _pad_to_pow2(a: 'FixedVariableArray') -> 'tuple[FixedVariableArray, int, int]':
     assert a.ndim == 3
-    from da4ml.trace import FixedVariable
+    from alkaid.trace import FixedVariable
 
     size = a.shape[-2]
     n_pad = 2 ** ceil(log2(size)) - size

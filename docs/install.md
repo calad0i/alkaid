@@ -1,9 +1,9 @@
 # Installation Guide
 
-`da4ml` is available on PyPI as binary wheel and can be installed using pip.
+`alkaid` is available on PyPI as binary wheel and can be installed using pip.
 
 ```bash
-pip install da4ml
+pip install alkaid
 ```
 
 ## Requirements
@@ -24,11 +24,11 @@ pip install da4ml
 
 
 ```bash
-git clone https://github.com/calad0i/da4ml.git
-pip install ./da4ml
+git clone https://github.com/calad0i/alkaid.git
+pip install ./alkaid
 ```
 
-Alternatively, you can configure and build da4ml with meson directly:
+Alternatively, you can configure and build alkaid with meson directly:
 
 ```bash
 meson setup build/cp31*

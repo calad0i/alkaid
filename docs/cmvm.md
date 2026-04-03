@@ -1,6 +1,6 @@
 # CMVM Optimization Algorithm
 
-The core of da4ml is a high-performance hybrid algorithm for optimizing Constant Matrix-Vector Multiplication (CMVM) operations. The goal is to implement the operation $y = Wx$, where $W$ is a constant matrix, as an efficient adder tree on an FPGA while minimizing resource usage (LUTs) and latency.
+The core of alkaid is a high-performance hybrid algorithm for optimizing Constant Matrix-Vector Multiplication (CMVM) operations. The goal is to implement the operation $y = Wx$, where $W$ is a constant matrix, as an efficient adder tree on an FPGA while minimizing resource usage (LUTs) and latency.
 
 The algorithm operates in two main stages, as illustrated below.
 

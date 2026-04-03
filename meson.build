@@ -1,4 +1,4 @@
-project('da4ml', 'cpp',
+project('alkaid', 'cpp',
   version: run_command('python3', 'tools/gitversion.py', check: true).stdout().strip(),
   meson_version: '>=1.9.0',
   default_options: ['buildtype=release', 'cpp_std=c++20'],
@@ -9,9 +9,9 @@ py = import('python').find_installation(pure: false)
 
 vcs_tag(
   command: ['python3', 'tools/gitversion.py'],
-  input: 'src/da4ml/_version.py.in',
+  input: 'src/alkaid/_version.py.in',
   output: '_version.py',
-  install_dir: py.get_install_dir() / 'da4ml',
+  install_dir: py.get_install_dir() / 'alkaid',
   replace_string: '@VCS_TAG@',
   install: true,
 )
@@ -25,34 +25,34 @@ _limited_abi = ''
 dais_bin = py.extension_module(
   'dais_bin',
   sources: [
-    'src/da4ml/_binary/dais/bindings.cc',
-    'src/da4ml/_binary/dais/DAISInterpreter.cc',
+    'src/alkaid/_binary/dais/bindings.cc',
+    'src/alkaid/_binary/dais/DAISInterpreter.cc',
   ],
   dependencies: [nanobind_dep, omp_dep],
   install: true,
-  subdir: 'da4ml/_binary',
+  subdir: 'alkaid/_binary',
 )
 
 cmvm_bin = py.extension_module(
   'cmvm_bin',
   sources: [
-    'src/da4ml/_binary/cmvm/api.cc',
-    'src/da4ml/_binary/cmvm/bindings.cc',
-    'src/da4ml/_binary/cmvm/bit_decompose.cc',
-    'src/da4ml/_binary/cmvm/cmvm_core.cc',
-    'src/da4ml/_binary/cmvm/indexers.cc',
-    'src/da4ml/_binary/cmvm/mat_decompose.cc',
-    'src/da4ml/_binary/cmvm/state_opr.cc',
-    'src/da4ml/_binary/dais/bindings.cc',
-    'src/da4ml/_binary/dais/DAISInterpreter.cc',
+    'src/alkaid/_binary/cmvm/api.cc',
+    'src/alkaid/_binary/cmvm/bindings.cc',
+    'src/alkaid/_binary/cmvm/bit_decompose.cc',
+    'src/alkaid/_binary/cmvm/cmvm_core.cc',
+    'src/alkaid/_binary/cmvm/indexers.cc',
+    'src/alkaid/_binary/cmvm/mat_decompose.cc',
+    'src/alkaid/_binary/cmvm/state_opr.cc',
+    'src/alkaid/_binary/dais/bindings.cc',
+    'src/alkaid/_binary/dais/DAISInterpreter.cc',
   ],
   dependencies: [nanobind_dep, xtensor_dep, omp_dep],
   install: true,
-  subdir: 'da4ml/_binary',
+  subdir: 'alkaid/_binary',
   limited_api: _limited_abi,
 )
 
-install_subdir('src/da4ml',
+install_subdir('src/alkaid',
   install_dir: py.get_install_dir(),
   exclude_directories: [
     '_binary',
@@ -63,19 +63,19 @@ install_subdir('src/da4ml',
   exclude_files: ['_version.py.in']
 )
 
-install_data('LICENSE', install_dir: py.get_install_dir() / 'da4ml')
+install_data('LICENSE', install_dir: py.get_install_dir() / 'alkaid')
 
 install_data(
-  'src/da4ml/_binary/__init__.py',
-  install_dir: py.get_install_dir() / 'da4ml' / '_binary',
+  'src/alkaid/_binary/__init__.py',
+  install_dir: py.get_install_dir() / 'alkaid' / '_binary',
 )
 
-install_subdir('src/da4ml/codegen/hls/source/ac_types/include',
-  install_dir: py.get_install_dir() / 'da4ml/codegen/hls/source/ac_types',
+install_subdir('src/alkaid/codegen/hls/source/ac_types/include',
+  install_dir: py.get_install_dir() / 'alkaid/codegen/hls/source/ac_types',
 )
 
-install_subdir('src/da4ml/codegen/hls/source/ap_types/include',
-  install_dir: py.get_install_dir() / 'da4ml/codegen/hls/source/ap_types',
+install_subdir('src/alkaid/codegen/hls/source/ap_types/include',
+  install_dir: py.get_install_dir() / 'alkaid/codegen/hls/source/ap_types',
 )
 
 stubgen = nanobind_dep.get_variable('stubgen')
@@ -85,7 +85,7 @@ custom_target(
   depends: dais_bin,
   command: [py, stubgen, '-m', 'dais_bin', '-M', 'py.typed'],
   install: true,
-  install_dir: py.get_install_dir() / 'da4ml' / '_binary',
+  install_dir: py.get_install_dir() / 'alkaid' / '_binary',
 )
 
 custom_target(
@@ -93,5 +93,5 @@ custom_target(
   depends: cmvm_bin,
   command: [py, stubgen, '-m', 'cmvm_bin', '-M', 'py.typed'],
   install: true,
-  install_dir: py.get_install_dir() / 'da4ml' / '_binary',
+  install_dir: py.get_install_dir() / 'alkaid' / '_binary',
 )

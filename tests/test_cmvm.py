@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from da4ml._binary import csd_decompose, kernel_decompose, solve
-from da4ml.trace.passes import optimize
-from da4ml.types import Pipeline
+from alkaid._binary import csd_decompose, kernel_decompose, solve
+from alkaid.trace.passes import optimize
+from alkaid.types import Pipeline
 
 
 @pytest.fixture(params=[2, 4, 8, 12])

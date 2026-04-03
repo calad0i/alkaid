@@ -7,7 +7,7 @@ from .plugin import DAISTracerPluginBase
 
 def operation(inp):
     """An example operation to be traced. One can use numpy-based operations along
-    with DAIS traceable operations provided in `da4ml.trace.ops`.
+    with DAIS traceable operations provided in `alkaid.trace.ops`.
     """
     w = np.arange(-60, 60).reshape(4, 5, 6).astype(np.float32) / 2**7
     inp = quantize(inp, 1, 7, 0)  # Input must be quantized before any non-trivial operation
@@ -41,8 +41,8 @@ class ExampleDAISTracer(DAISTracerPluginBase):
 
     This plugin must be registered as an entry point under the group `dais_tracer.plugins`.
     The entry name should be the module name where the model class is defined. In this case,
-    since the target model class `ExampleModel` is defined in `da4ml.converter.example_plugin`, the entry point
-    should be registered under the name `da4ml`. See `pyproject.toml` for an example.
+    since the target model class `ExampleModel` is defined in `alkaid.converter.example_plugin`, the entry point
+    should be registered under the name `alkaid`. See `pyproject.toml` for an example.
     """
 
     model: ExampleModel

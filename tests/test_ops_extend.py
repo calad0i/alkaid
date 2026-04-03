@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from da4ml.trace import FixedVariableArray, FixedVariableArrayInput, comb_trace
-from da4ml.trace.ops import quantize, relu
-from da4ml.types import CombLogic
+from alkaid.trace import FixedVariableArray, FixedVariableArrayInput, trace
+from alkaid.trace.ops import quantize, relu
+from alkaid.types import CombLogic
 
 from .test_ops import OperationTest
 
@@ -155,7 +155,7 @@ def test_offload(thres):
 
     inp = FixedVariableArrayInput((2, 8), solver_options={'offload_fn': offload_fn}).quantize(1, 4, 3)
     out = inp @ w
-    comb = comb_trace(inp, out)
+    comb = trace(inp, out)
 
     data_in = np.random.rand(10000, 2, 8).astype(np.float32) * 64 - 32
     traced_out = comb.predict(data_in, n_threads=1)
@@ -199,7 +199,7 @@ class TestHistogram(OperationTest):
 
 
 def test_empty_histogram():
-    from da4ml.trace.fixed_variable import HWConfig
+    from alkaid.trace.fixed_variable import HWConfig
 
     hwconf = HWConfig(1, 1, -1)
     fva = FixedVariableArray(np.array([], dtype=object), hwconf=hwconf)

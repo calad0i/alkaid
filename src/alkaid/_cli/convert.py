@@ -4,10 +4,10 @@ from pathlib import Path
 
 import numpy as np
 
-from da4ml.trace.passes import optimize
+from alkaid.trace.passes import optimize
 
 
-def to_da4ml(
+def to_alkaid(
     model_path: Path,
     path: Path,
     n_test_sample: int,
@@ -29,10 +29,10 @@ def to_da4ml(
     opt: bool = True,
     n_stages: int = -1,
 ):
-    from da4ml.codegen import HLSModel, RTLModel
-    from da4ml.converter import trace_model
-    from da4ml.trace import HWConfig, comb_trace
-    from da4ml.types import CombLogic
+    from alkaid.codegen import HLSModel, RTLModel
+    from alkaid.converter import trace_model
+    from alkaid.trace import HWConfig, trace
+    from alkaid.types import CombLogic
 
     if model_path.suffix in {'.h5', '.keras'}:
         import hgq  # noqa: F401
@@ -42,7 +42,7 @@ def to_da4ml(
         if verbose > 1:
             model.summary()
         inp, out = trace_model(model, HWConfig(*hwconf), {'hard_dc': hard_dc}, verbose > 1, inputs_kif=inputs_kif)
-        comb = comb_trace(inp, out, optimize=opt)
+        comb = trace(inp, out, optimize=opt)
 
     elif model_path.suffix == '.json':
         with open(model_path) as f:
@@ -155,9 +155,9 @@ def to_da4ml(
         except RuntimeError:
             pass
 
-    y_da4ml = da_model.predict(data_in, n_threads=n_threads)
-    if not np.all(y_comb == y_da4ml):
-        raise RuntimeError(f'[CRITICAL ERROR] RTL validation failed: {np.sum(y_comb != y_da4ml)}/{total} mismatches!')
+    y_alkaid = da_model.predict(data_in, n_threads=n_threads)
+    if not np.all(y_comb == y_alkaid):
+        raise RuntimeError(f'[CRITICAL ERROR] RTL validation failed: {np.sum(y_comb != y_alkaid)}/{total} mismatches!')
     if verbose:
         if flavor in ('verilog', 'vhdl'):
             print(f'[INFO]  RTL validation passed: [0/{total}] mismatches.')
@@ -174,7 +174,7 @@ def convert_main(args):
     else:
         metadata = None
 
-    to_da4ml(
+    to_alkaid(
         args.model,
         args.outdir,
         args.n_test_sample,
@@ -209,7 +209,7 @@ def _add_convert_args(parser: argparse.ArgumentParser):
         type=str,
         default='verilog',
         choices=['verilog', 'vhdl', 'vitis', 'hlslib', 'oneapi'],
-        help='Flavor for da4ml model',
+        help='Flavor for alkaid model',
     )
     parser.add_argument('--latency-cutoff', '-lc', type=float, default=5, help='Latency cutoff for pipelining')
     parser.add_argument('--part-name', '-p', type=str, default='xcvu13p-flga2577-2-e', help='FPGA part name')
@@ -271,7 +271,7 @@ def _add_convert_args(parser: argparse.ArgumentParser):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Convert Keras model to da4ml RTL model with random input test vectors')
+    parser = argparse.ArgumentParser(description='Convert Keras model to alkaid RTL model with random input test vectors')
     _add_convert_args(parser)
     args = parser.parse_args()
     convert_main(args)

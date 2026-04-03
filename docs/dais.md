@@ -1,7 +1,7 @@
 DA Instruction Set (DAIS)
 =============================================
 
-In da4ml, all operations are converted to a RISC-like, instruction set level intermediate representation, distributed arithmetic instruction set (DAIS, pounces as "dice"). DAIS is designed to be minimal and lightweight, while being extensible and satisfying the requirements for representing neural networks required in the framework. Specifically, each DAIS program is in SSA form and contains one block of logic that are fully parallelizable (i.e., all combinational), and resource multiplexing shall be performed on a higher level.
+In alkaid, all operations are converted to a RISC-like, instruction set level intermediate representation, distributed arithmetic instruction set (DAIS, pounces as "dice"). DAIS is designed to be minimal and lightweight, while being extensible and satisfying the requirements for representing neural networks required in the framework. Specifically, each DAIS program is in SSA form and contains one block of logic that are fully parallelizable (i.e., all combinational), and resource multiplexing shall be performed on a higher level.
 
 One program represented in DAIS consists of the following components:
 

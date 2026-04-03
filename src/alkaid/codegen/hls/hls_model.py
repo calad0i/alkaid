@@ -13,8 +13,8 @@ from uuid import uuid4
 import numpy as np
 from numpy.typing import NDArray
 
-from da4ml.codegen.hls.hls_codegen import get_io_types, hls_logic_and_bridge_gen
-from da4ml.types import CombLogic
+from alkaid.codegen.hls.hls_codegen import get_io_types, hls_logic_and_bridge_gen
+from alkaid.types import CombLogic
 
 from ...types import minimal_kif
 from .. import hls

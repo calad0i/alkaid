@@ -8,7 +8,7 @@ requires = [
 ]
 
 [project]
-name = "da4ml"
+name = "alkaid"
 description = "Distributed Arithmetic for Machine Learning"
 readme = "README.md"
 keywords = [
@@ -50,9 +50,9 @@ optional-dependencies.tests = [
   "pytest-xdist",
   "xls-python",
 ]
-urls.repository = "https://github.com/calad0i/da4ml"
-scripts.da4ml = "da4ml._cli:main"
-entry-points."dais_tracer.plugins".da4ml = "da4ml.converter.example:ExampleDAISTracer"
+urls.repository = "https://github.com/calad0i/alkaid"
+scripts.alkaid = "alkaid._cli:main"
+entry-points."dais_tracer.plugins".alkaid = "alkaid.converter.example:ExampleDAISTracer"
 
 [tool.meson-python]
 limited-api = false
@@ -64,7 +64,7 @@ line-length = 130
 indent-width = 4
 
 include = [ "src/**/*.py" ]
-exclude = [ "src/da4ml/codegen/hls/source/ac_types", "src/da4ml/codegen/hls/source/ap_types" ]
+exclude = [ "src/alkaid/codegen/hls/source/ac_types", "src/alkaid/codegen/hls/source/ap_types" ]
 
 format.indent-style = "space"
 format.quote-style = "single"
@@ -82,7 +82,7 @@ env = [ "DA_DEFAULT_THREADS=1" ]
 
 addopts = [
   "--import-mode=importlib",
-  "--cov=src/da4ml",
+  "--cov=src/alkaid",
   "--cov-report=xml",
   "--cov-report=html",
 ]
@@ -90,4 +90,4 @@ addopts = [
 [tool.coverage.report]
 exclude_also = [ 'no cover: start(?s:.)*?no cover: stop', 'raise ValueError' ]
 [tool.coverage.run]
-omit = [ "*/_version.py", "src/da4ml/_cli/*.py" ]
+omit = [ "*/_version.py", "src/alkaid/_cli/*.py" ]

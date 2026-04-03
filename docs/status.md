@@ -1,6 +1,6 @@
 # Project Status
 
-da4ml is currently **beta** software and is under active development. Its core functionality is stable, but some features/API regarding tracing individual operations may change in future releases. We welcome contributions and feedback from the community through issues and pull requests.
+alkaid is currently **beta** software and is under active development. Its core functionality is stable, but some features/API regarding tracing individual operations may change in future releases. We welcome contributions and feedback from the community through issues and pull requests.
 
 ```{note}
 It is advised to always verify the results produced from the generated code.

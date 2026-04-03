@@ -15,11 +15,11 @@
 namespace nb = nanobind;
 using namespace nb::literals;
 
-// Stub type so nanobind generates "da4ml.types.Pipeline" in the .pyi return type
+// Stub type so nanobind generates "alkaid.types.Pipeline" in the .pyi return type
 struct PyPipeline {};
 namespace nanobind::detail {
     template <> struct type_caster<PyPipeline> {
-        NB_TYPE_CASTER(PyPipeline, const_name("da4ml.types.Pipeline"))
+        NB_TYPE_CASTER(PyPipeline, const_name("alkaid.types.Pipeline"))
     };
 } // namespace nanobind::detail
 
@@ -102,7 +102,7 @@ nb::tuple csd_decompose_numpy(const nb::ndarray<float> &in, bool center) {
 
 // Convert C++ CombLogicResult -> Python CombLogic NamedTuple
 static nb::object make_py_comblogic(const CombLogicResult &sol) {
-    auto types = nb::module_::import_("da4ml.types");
+    auto types = nb::module_::import_("alkaid.types");
     auto CombLogic_cls = types.attr("CombLogic");
     auto Op_cls = types.attr("Op");
     auto QInterval_cls = types.attr("QInterval");
@@ -138,7 +138,7 @@ static nb::object make_py_comblogic(const CombLogicResult &sol) {
 
 // Convert C++ PipelineResult -> Python Pipeline NamedTuple
 static nb::object make_py_pipeline(const PipelineResult &result) {
-    auto types = nb::module_::import_("da4ml.types");
+    auto types = nb::module_::import_("alkaid.types");
     auto Pipeline_cls = types.attr("Pipeline");
 
     nb::list solutions;

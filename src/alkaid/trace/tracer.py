@@ -59,7 +59,7 @@ def needs_negative(variables: Sequence[FixedVariable], outputs: Sequence[FixedVa
     return needs_neg
 
 
-def _comb_trace(inputs: Sequence[FixedVariable], outputs: Sequence[FixedVariable]):
+def _trace(inputs: Sequence[FixedVariable], outputs: Sequence[FixedVariable]):
     variables = gather_variables(inputs, outputs)
     ops: list[Op] = []
     inp_uuids = {v.id: i for i, v in enumerate(inputs)}
@@ -184,7 +184,7 @@ def _comb_trace(inputs: Sequence[FixedVariable], outputs: Sequence[FixedVariable
     return ops, out_index, lookup_tables
 
 
-def comb_trace(inputs, outputs, optimize=True, keep_dead_inputs: bool = False) -> CombLogic:
+def trace(inputs, outputs, optimize=True, keep_dead_inputs: bool = False) -> CombLogic:
     if isinstance(inputs, FixedVariable):
         inputs = [inputs]
     if isinstance(outputs, FixedVariable):
@@ -201,7 +201,7 @@ def comb_trace(inputs, outputs, optimize=True, keep_dead_inputs: bool = False) -
             if not isinstance(v, FixedVariable):
                 outputs[i] = FixedVariable.from_const(v, hwconf)
 
-    ops, out_index, lookup_tables = _comb_trace(inputs, outputs)
+    ops, out_index, lookup_tables = _trace(inputs, outputs)
     shape = len(inputs), len(outputs)
     inp_shifts = [0] * shape[0]
     out_sf = [v._factor for v in outputs]

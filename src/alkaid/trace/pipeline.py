@@ -2,7 +2,7 @@ from math import ceil
 
 import numpy as np
 
-from da4ml.types import CombLogic, Op, Pipeline
+from alkaid.types import CombLogic, Op, Pipeline
 
 from .passes import dead_code_elimin
 

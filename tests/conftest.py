@@ -10,7 +10,7 @@ import pytest
 
 @pytest.fixture(scope='function')
 def temp_directory(request: pytest.FixtureRequest):
-    root = Path(os.environ.get('DA4ML_TEST_DIR', '/tmp/da4ml_test'))
+    root = Path(os.environ.get('ALKAID_TEST_DIR', '/tmp/alkaid_test'))
     root.mkdir(exist_ok=True)
 
     test_name = request.node.name
@@ -28,7 +28,7 @@ def pytest_sessionfinish(session, exitstatus):
     # Skip on xdist worker nodes
     if hasattr(session.config, 'workerinput'):
         return
-    root = Path(os.environ.get('DA4ML_TEST_DIR', '/tmp/da4ml_test'))
+    root = Path(os.environ.get('ALKAID_TEST_DIR', '/tmp/alkaid_test'))
     if not root.exists():
         return
     if exitstatus == 0:
@@ -44,7 +44,7 @@ def pytest_sessionfinish(session, exitstatus):
 def pytest_collection_finish(session):
     if not any('test_report' in str(item) for item in session.items):
         return
-    root = Path(os.environ.get('DA4ML_TEST_DIR', '/tmp/da4ml_test'))
+    root = Path(os.environ.get('ALKAID_TEST_DIR', '/tmp/alkaid_test'))
     root.mkdir(exist_ok=True)
 
     lock = root / '.extract_lock'
