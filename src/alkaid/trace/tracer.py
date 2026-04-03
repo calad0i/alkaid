@@ -6,11 +6,11 @@ import numpy as np
 
 from .._binary import get_lsb_loc
 from ..types import CombLogic, Op, QInterval
-from .fixed_variable import FixedVariable
+from .fixed_variable import FVariable
 from .passes import optimize as _optimize
 
 
-def _recursive_gather(v: FixedVariable, gathered: dict[UUID, FixedVariable]):
+def _recursive_gather(v: FVariable, gathered: dict[UUID, FVariable]):
     if v.id in gathered:
         return
     assert v._from is not None
@@ -19,7 +19,7 @@ def _recursive_gather(v: FixedVariable, gathered: dict[UUID, FixedVariable]):
     gathered[v.id] = v
 
 
-def gather_variables(inputs: Sequence[FixedVariable], outputs: Sequence[FixedVariable]):
+def gather_variables(inputs: Sequence[FVariable], outputs: Sequence[FVariable]):
     input_ids = {v.id for v in inputs}
     gathered = {v.id: v for v in inputs}
     for o in outputs:
@@ -45,7 +45,7 @@ def gather_variables(inputs: Sequence[FixedVariable], outputs: Sequence[FixedVar
     return variables
 
 
-def needs_negative(variables: Sequence[FixedVariable], outputs: Sequence[FixedVariable]) -> set[UUID]:
+def needs_negative(variables: Sequence[FVariable], outputs: Sequence[FVariable]) -> set[UUID]:
     needs_neg = set()
     for v in variables:
         if v.opr == 'vadd' or v.opr == 'vmul' or v.opr == 'lookup':
@@ -59,7 +59,7 @@ def needs_negative(variables: Sequence[FixedVariable], outputs: Sequence[FixedVa
     return needs_neg
 
 
-def _trace(inputs: Sequence[FixedVariable], outputs: Sequence[FixedVariable]):
+def _trace(inputs: Sequence[FVariable], outputs: Sequence[FVariable]):
     variables = gather_variables(inputs, outputs)
     ops: list[Op] = []
     inp_uuids = {v.id: i for i, v in enumerate(inputs)}
@@ -185,21 +185,21 @@ def _trace(inputs: Sequence[FixedVariable], outputs: Sequence[FixedVariable]):
 
 
 def trace(inputs, outputs, optimize=True, keep_dead_inputs: bool = False) -> CombLogic:
-    if isinstance(inputs, FixedVariable):
+    if isinstance(inputs, FVariable):
         inputs = [inputs]
-    if isinstance(outputs, FixedVariable):
+    if isinstance(outputs, FVariable):
         outputs = [outputs]
 
     inputs, outputs = list(np.ravel(inputs)), list(np.ravel(outputs))  # type: ignore
 
     assert all(inp._factor > 0 for inp in inputs), 'Input variables must have positive scaling factor'
 
-    if any(not isinstance(v, FixedVariable) for v in outputs):
+    if any(not isinstance(v, FVariable) for v in outputs):
         hwconf = inputs[0].hwconf
         outputs = list(outputs)
         for i, v in enumerate(outputs):
-            if not isinstance(v, FixedVariable):
-                outputs[i] = FixedVariable.from_const(v, hwconf)
+            if not isinstance(v, FVariable):
+                outputs[i] = FVariable.from_const(v, hwconf)
 
     ops, out_index, lookup_tables = _trace(inputs, outputs)
     shape = len(inputs), len(outputs)

@@ -3,7 +3,7 @@ import pytest
 
 from alkaid.converter import trace_model
 from alkaid.converter.example import ExampleModel
-from alkaid.trace import FixedVariableArrayInput, trace
+from alkaid.trace import FVArrayInput, trace
 
 
 @pytest.mark.parametrize('inp_shape', [(4, 5), None])
@@ -12,7 +12,7 @@ def test_plugin(inp_shape, manual_inp_def):
     model = ExampleModel(input_shape=inp_shape)
 
     if manual_inp_def:
-        inputs = FixedVariableArrayInput((4, 5))
+        inputs = FVArrayInput((4, 5))
     else:
         inputs = None
         if inp_shape is None:

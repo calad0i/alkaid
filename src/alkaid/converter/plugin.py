@@ -4,16 +4,16 @@ from typing import Any
 import numpy as np
 
 from ..cmvm import solver_options_t
-from ..trace import FixedVariable, FixedVariableArray, FixedVariableArrayInput, HWConfig
+from ..trace import FVariable, FVArray, FVArrayInput, HWConfig
 
 
-def _flatten_arr(args: Any) -> FixedVariableArray:
-    if isinstance(args, FixedVariableArray):
+def _flatten_arr(args: Any) -> FVArray:
+    if isinstance(args, FVArray):
         return np.ravel(args)  # type: ignore
-    if isinstance(args, FixedVariable):
-        return FixedVariableArray(np.array([args]))
+    if isinstance(args, FVariable):
+        return FVArray(np.array([args]))
     if not isinstance(args, Sequence):
-        raise ValueError(f'Expected a sequence or FixedVariable, got {type(args)}')
+        raise ValueError(f'Expected a sequence or FVariable, got {type(args)}')
     args = [_flatten_arr(a) for a in args]
     args = [a for a in args if a is not None]
     return np.concatenate(args)  # type: ignore
@@ -43,8 +43,8 @@ class DAISTracerPluginBase:
     def apply_model(
         self,
         verbose: bool,
-        inputs: tuple[FixedVariableArray, ...],
-    ) -> tuple[dict[str, FixedVariableArray], list[str]]:
+        inputs: tuple[FVArray, ...],
+    ) -> tuple[dict[str, FVArray], list[str]]:
         """Apply the model and return all intermediate traces.
 
         Parameters
@@ -56,7 +56,7 @@ class DAISTracerPluginBase:
         Returns
         =======
         A tuple containing:
-        - dict[str, FixedVariableArray]: A dictionary of intermediate names -> FixedVariableArray
+        - dict[str, FVArray]: A dictionary of intermediate names -> FVArray
         - list[str]: A list of output names.
         """
         ...
@@ -74,9 +74,9 @@ class DAISTracerPluginBase:
 
     def _get_inputs(
         self,
-        inputs: tuple[FixedVariableArray, ...] | FixedVariableArray | None,
+        inputs: tuple[FVArray, ...] | FVArray | None,
         inputs_kif: tuple[int, int, int] | Sequence[tuple[int, int, int]] | None,
-    ) -> tuple[FixedVariableArray, ...]:
+    ) -> tuple[FVArray, ...]:
         if inputs is not None:
             return inputs if isinstance(inputs, tuple) else (inputs,)
 
@@ -84,7 +84,7 @@ class DAISTracerPluginBase:
         assert shapes is not None, 'Inputs must be provided: cannot determine input shapes automatically.'
 
         if inputs_kif is None:
-            return tuple(FixedVariableArrayInput(shape, self.hwconf, self.solver_options) for shape in shapes)
+            return tuple(FVArrayInput(shape, self.hwconf, self.solver_options) for shape in shapes)
 
         _kifs: Sequence[tuple[int, int, int]] = inputs_kif  # type: ignore
         if not isinstance(inputs_kif[0], Sequence):
@@ -94,15 +94,15 @@ class DAISTracerPluginBase:
         assert len(_kifs) == len(shapes), 'Length of inputs_kif must match number of inputs'
 
         kifs = tuple(tuple(np.full(shape, v, dtype=np.int8) for v in _kif) for _kif, shape in zip(_kifs, shapes))
-        return tuple(FixedVariableArray.from_kif(k, i, f, self.hwconf, 0, self.solver_options) for k, i, f in kifs)
+        return tuple(FVArray.from_kif(k, i, f, self.hwconf, 0, self.solver_options) for k, i, f in kifs)
 
     def trace(
         self,
         verbose: bool = False,
-        inputs: tuple[FixedVariableArray, ...] | FixedVariableArray | None = None,
+        inputs: tuple[FVArray, ...] | FVArray | None = None,
         inputs_kif: tuple[int, int, int] | None = None,
         dump: bool = False,
-    ) -> dict[str, FixedVariableArray] | tuple[FixedVariableArray, FixedVariableArray]:
+    ) -> dict[str, FVArray] | tuple[FVArray, FVArray]:
         """Trace the model.
 
         Parameters
@@ -114,8 +114,8 @@ class DAISTracerPluginBase:
 
         Returns
         =======
-        If dump is True, returns a dictionary of all intermediate names -> FixedVariableArray.
-        If dump is False, returns a list of output FixedVariableArray.
+        If dump is True, returns a dictionary of all intermediate names -> FVArray.
+        If dump is False, returns a list of output FVArray.
         """
 
         inputs = self._get_inputs(inputs, inputs_kif)

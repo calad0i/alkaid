@@ -4,18 +4,18 @@ import numpy as np
 from numpy.typing import NDArray
 from quantizers.fixed_point.fixed_point_ops_np import get_fixed_quantizer_np
 
-from ..fixed_variable_array import FixedVariable
+from ..fixed_variable_array import FVariable
 
 if TYPE_CHECKING:
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
-T = TypeVar('T', 'FixedVariableArray', NDArray[np.floating], list[FixedVariable])
+T = TypeVar('T', 'FVArray', NDArray[np.floating], list[FVariable])
 
 
 def relu(x: T, i: NDArray[np.integer] | None = None, f: NDArray[np.integer] | None = None, round_mode: str = 'TRN') -> T:
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
-    if isinstance(x, FixedVariableArray):
+    if isinstance(x, FVArray):
         return x.relu(i=i, f=f, round_mode=round_mode)
     elif isinstance(x, list):
         return [xx.relu(i=ii, f=ff, round_mode=round_mode) for xx, ii, ff in zip(x, i, f)]  # type: ignore
@@ -53,12 +53,12 @@ def quantize(
     overflow_mode: str = 'WRAP',
     round_mode: str = 'TRN',
 ) -> T:
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
-    if isinstance(x, (FixedVariableArray, FixedVariable)):
+    if isinstance(x, (FVArray, FVariable)):
         return x.quantize(k=k, i=i, f=f, overflow_mode=overflow_mode, round_mode=round_mode)
     elif isinstance(x, list):
-        ret: list[FixedVariable] = []
+        ret: list[FVariable] = []
         for idx in range(len(x)):
             ret.append(
                 x[idx].quantize(

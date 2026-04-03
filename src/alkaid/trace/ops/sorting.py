@@ -7,11 +7,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 if typing.TYPE_CHECKING:
-    from ..fixed_variable import FixedVariable
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable import FVariable
+    from ..fixed_variable_array import FVArray
 
 
-def cmp_swap(a: 'Sequence[FixedVariable]|NDArray', b: 'Sequence[FixedVariable]|NDArray', ascending: bool):
+def cmp_swap(a: 'Sequence[FVariable]|NDArray', b: 'Sequence[FVariable]|NDArray', ascending: bool):
     ka, kb = a[0], b[0]
     k = ka <= kb
     a, b = zip(*[(k.msb_mux(va, vb), k.msb_mux(vb, va)) for va, vb in zip(a, b)])
@@ -42,16 +42,16 @@ def _bitonic_sort(a: 'NDArray', ascending: bool):
     _bitonic_merge(a, ascending)
 
 
-def _pad_to_pow2(a: 'FixedVariableArray') -> 'tuple[FixedVariableArray, int, int]':
+def _pad_to_pow2(a: 'FVArray') -> 'tuple[FVArray, int, int]':
     assert a.ndim == 3
-    from alkaid.trace import FixedVariable
+    from alkaid.trace import FVariable
 
     size = a.shape[-2]
     n_pad = 2 ** ceil(log2(size)) - size
     n_pad_low, n_pad_high = n_pad // 2, n_pad - n_pad // 2
     _low, _high, _ = a.lhs
-    low_pad = FixedVariable.from_const(np.min(_low) - 1, hwconf=a.hwconf)
-    high_pad = FixedVariable.from_const(np.max(_high) + 1, hwconf=a.hwconf)
+    low_pad = FVariable.from_const(np.min(_low) - 1, hwconf=a.hwconf)
+    high_pad = FVariable.from_const(np.max(_high) + 1, hwconf=a.hwconf)
     low_pad = np.full((a.shape[0], n_pad_low, a.shape[-1]), low_pad)
     high_pad = np.full((a.shape[0], n_pad_high, a.shape[-1]), high_pad)
     return np.concatenate([low_pad, a, high_pad], axis=-2), n_pad_low, n_pad_high  # type: ignore
@@ -84,7 +84,7 @@ def sort(  # type: ignore
     axis: int | None = None,
     kind: str = 'batcher',
     aux_value: None = None,
-) -> 'FixedVariableArray': ...
+) -> 'FVArray': ...
 
 
 @overload
@@ -92,19 +92,19 @@ def sort(
     a: 'np.ndarray',
     axis: int | None = None,
     kind: str = 'batcher',
-    aux_value: 'FixedVariableArray' = ...,
-) -> 'tuple[FixedVariableArray, FixedVariableArray]': ...
+    aux_value: 'FVArray' = ...,
+) -> 'tuple[FVArray, FVArray]': ...
 
 
 def sort(  # type: ignore
     a: 'np.ndarray',
     axis: int | None = None,
     kind: str = 'batcher',
-    aux_value: 'FixedVariableArray | None' = None,
+    aux_value: 'FVArray | None' = None,
 ):
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
-    if not isinstance(a, FixedVariableArray):
+    if not isinstance(a, FVArray):
         return np.sort(a, axis=axis)
     if axis is None:
         axis = -1

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from alkaid.trace import FixedVariableArray, FixedVariableArrayInput, trace
+from alkaid.trace import FVArray, FVArrayInput, trace
 from alkaid.trace.ops import quantize, relu
 from alkaid.types import CombLogic
 
@@ -38,9 +38,7 @@ functions = {
     'multi_cadd': lambda x, w: x * 2.0 ** np.arange(-8, 8, 2) + 2 + 3.75,
     'mux0': lambda x, w: np.where(x[..., None] > w, x[..., None], w),
     'lut': lambda x, w: (
-        quantize(np.cos(np.sin(x)), 1, 2, 3)
-        if not isinstance(x, FixedVariableArray)
-        else quantize(x.apply(np.sin).apply(np.cos), 1, 2, 3)
+        quantize(np.cos(np.sin(x)), 1, 2, 3) if not isinstance(x, FVArray) else quantize(x.apply(np.sin).apply(np.cos), 1, 2, 3)
     ),
     'prod': lambda x, w: np.prod(x[..., :3], axis=-1, keepdims=True),
     'mean': lambda x, w: np.mean(x, axis=-1, keepdims=True),
@@ -84,7 +82,7 @@ class TestSort(OperationTest):
     def op_func(self, kind, size):
         def sort_fn(x):
             _kind = kind
-            if not isinstance(x, FixedVariableArray):
+            if not isinstance(x, FVArray):
                 _kind = 'quicksort'
             if size >= 4:
                 return np.sort(x[..., :size], axis=-1, kind=_kind)  # type: ignore
@@ -100,7 +98,7 @@ class TestArgsort(OperationTest):
     @pytest.fixture()
     def op_func(self):
         def argsort_fn(x):
-            if isinstance(x, FixedVariableArray):
+            if isinstance(x, FVArray):
                 return x[..., :4][np.argsort(x[..., 4:])]  # type: ignore
             else:
                 return np.apply_along_axis(lambda v: v[:4][np.argsort(v[4:])], -1, x)
@@ -153,7 +151,7 @@ def test_offload(thres):
     def offload_fn(weights, vector):
         return np.random.rand(*np.shape(weights)) > thres
 
-    inp = FixedVariableArrayInput((2, 8), solver_options={'offload_fn': offload_fn}).quantize(1, 4, 3)
+    inp = FVArrayInput((2, 8), solver_options={'offload_fn': offload_fn}).quantize(1, 4, 3)
     out = inp @ w
     comb = trace(inp, out)
 
@@ -191,7 +189,7 @@ class TestHistogram(OperationTest):
         kwargs = {**edge_config, 'weights': w}
 
         def hist_fn(x):
-            if isinstance(x, FixedVariableArray):
+            if isinstance(x, FVArray):
                 return np.histogram(x, **kwargs)[0]
             return np.apply_along_axis(lambda v: np.histogram(v, **kwargs)[0], -1, x)
 
@@ -202,7 +200,7 @@ def test_empty_histogram():
     from alkaid.trace.fixed_variable import HWConfig
 
     hwconf = HWConfig(1, 1, -1)
-    fva = FixedVariableArray(np.array([], dtype=object), hwconf=hwconf)
+    fva = FVArray(np.array([], dtype=object), hwconf=hwconf)
     counts, edges = np.histogram(fva, bins=3, range=(0.0, 3.0))
     assert counts.shape == (3,)
     assert all(float(c.low) == 0.0 for c in np.asarray(counts).ravel())

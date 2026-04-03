@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 
 from .._binary import get_lsb_loc
 from ..cmvm import solve, solver_options_t
-from .fixed_variable import FixedVariable, FixedVariableInput, HWConfig, LookupTable, QInterval
+from .fixed_variable import FVariable, FVariableInput, HWConfig, LookupTable, QInterval
 from .ops import _quantize, einsum, histogram, reduce, sort
 
 T = TypeVar('T')
@@ -42,24 +42,24 @@ def to_raw_arr(obj: T) -> T:
         return [to_raw_arr(x) for x in obj]  # type: ignore
     elif isinstance(obj, dict):
         return {k: to_raw_arr(v) for k, v in obj.items()}  # type: ignore
-    if isinstance(obj, FixedVariableArray):
+    if isinstance(obj, FVArray):
         return np.asarray(obj)  # type: ignore
     return obj
 
 
 def _max_of(a, b):
-    if isinstance(a, FixedVariable):
+    if isinstance(a, FVariable):
         return a.max_of(b)
-    elif isinstance(b, FixedVariable):
+    elif isinstance(b, FVariable):
         return b.max_of(a)
     else:
         return max(a, b)
 
 
 def _min_of(a, b):
-    if isinstance(a, FixedVariable):
+    if isinstance(a, FVariable):
         return a.min_of(b)
-    elif isinstance(b, FixedVariable):
+    elif isinstance(b, FVariable):
         return b.min_of(a)
     else:
         return min(a, b)
@@ -78,7 +78,7 @@ def mmm(mat0: np.ndarray, mat1: np.ndarray):
     return _vars.reshape(shape)
 
 
-def cmvm(cm: np.ndarray, v: 'FixedVariableArray', solver_options: solver_options_t) -> np.ndarray:
+def cmvm(cm: np.ndarray, v: 'FVArray', solver_options: solver_options_t) -> np.ndarray:
     offload_fn = solver_options.get('offload_fn', None)
     mask = offload_fn(cm, v) if offload_fn is not None else None
     v_raw = np.asarray(v)
@@ -129,8 +129,8 @@ _unary_functions = (
 )
 
 
-class FixedVariableArray(np.ndarray):
-    """Symbolic array of FixedVariable for tracing operations. Supports numpy ufuncs and array functions."""
+class FVArray(np.ndarray):
+    """Symbolic array of FVariable for tracing operations. Supports numpy ufuncs and array functions."""
 
     def __new__(
         cls,
@@ -141,12 +141,12 @@ class FixedVariableArray(np.ndarray):
         _arr = np.array(vars, dtype=object)
         _f = _arr.ravel()
         if hwconf is None:
-            hwconf = next(iter(v for v in _f if isinstance(v, FixedVariable))).hwconf
+            hwconf = next(iter(v for v in _f if isinstance(v, FVariable))).hwconf
         hwconf = HWConfig(*hwconf)
         for i, v in enumerate(_f):
-            if not isinstance(v, FixedVariable):
+            if not isinstance(v, FVariable):
                 v = float(v)
-                _f[i] = FixedVariable(v, v, 2 ** get_lsb_loc(v), hwconf=hwconf)
+                _f[i] = FVariable(v, v, 2 ** get_lsb_loc(v), hwconf=hwconf)
         obj = np.ndarray.__new__(cls, shape=_arr.shape, dtype=object)
         obj[...] = _arr
         obj.hwconf = hwconf
@@ -166,7 +166,7 @@ class FixedVariableArray(np.ndarray):
         if func in _ARRAY_FN:
             return _ARRAY_FN[func](*args, **kwargs)
         args, kwargs = to_raw_arr(args), to_raw_arr(kwargs)
-        return FixedVariableArray(func(*args, **kwargs), self.solver_options, hwconf=self.hwconf)
+        return FVArray(func(*args, **kwargs), self.solver_options, hwconf=self.hwconf)
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         if method == 'reduce':
@@ -202,7 +202,7 @@ class FixedVariableArray(np.ndarray):
 
         vars = []
         for l, h, s, lat in zip(low, high, step, latency):
-            var = FixedVariable(
+            var = FVariable(
                 low=float(l),
                 high=float(h),
                 step=float(s),
@@ -232,7 +232,7 @@ class FixedVariableArray(np.ndarray):
         high, low = _high - step, -_high * k
         return cls.from_lhs(low, high, step, hwconf, latency, solver_options)
 
-    def __getitem__(self, key) -> 'FixedVariableArray|FixedVariable':  # type: ignore
+    def __getitem__(self, key) -> 'FVArray|FVariable':  # type: ignore
         if isinstance(key, _ArgsortDelayedIndex):
             ret = sort(*key.args, **key.kwargs, aux_value=self)[1]
             for s in key._slicing:
@@ -245,12 +245,12 @@ class FixedVariableArray(np.ndarray):
         _raw = np.asarray(self)
         hwconf_str = str(_raw.ravel()[0].hwconf)[8:]
         max_lat = max(v.latency for v in _raw.ravel())
-        return f'FixedVariableArray(shape={shape}, hwconf={hwconf_str}, latency={max_lat})'
+        return f'FVArray(shape={shape}, hwconf={hwconf_str}, latency={max_lat})'
 
     def to_bool(self, reduction='any'):
         assert reduction in ('any', 'all'), f'Reduction must be either "any" or "all", got {reduction}'
         _arr = np.array([v.unary_bit_op(reduction) for v in np.asarray(self).ravel()]).reshape(self.shape)
-        return FixedVariableArray(_arr, self.solver_options, hwconf=self.hwconf)
+        return FVArray(_arr, self.solver_options, hwconf=self.hwconf)
 
     def relu(
         self,
@@ -262,7 +262,7 @@ class FixedVariableArray(np.ndarray):
         _i = np.broadcast_to(i, shape) if i is not None else np.full(shape, None)
         _f = np.broadcast_to(f, shape) if f is not None else np.full(shape, None)
         ret = [v.relu(i=iv, f=fv, round_mode=round_mode) for v, iv, fv in zip(np.asarray(self).ravel(), _i.ravel(), _f.ravel())]  # type: ignore
-        return FixedVariableArray(np.array(ret).reshape(shape), self.solver_options, hwconf=self.hwconf)
+        return FVArray(np.array(ret).reshape(shape), self.solver_options, hwconf=self.hwconf)
 
     def quantize(
         self,
@@ -282,7 +282,7 @@ class FixedVariableArray(np.ndarray):
             v.quantize(k=kk, i=ii, f=ff, overflow_mode=overflow_mode, round_mode=round_mode)
             for v, kk, ii, ff in zip(np.asarray(self).ravel(), k.ravel(), i.ravel(), f.ravel())  # type: ignore
         ]
-        return FixedVariableArray(np.array(ret).reshape(shape), self.solver_options, hwconf=self.hwconf)
+        return FVArray(np.array(ret).reshape(shape), self.solver_options, hwconf=self.hwconf)
 
     @property
     def kif(self):
@@ -307,40 +307,40 @@ class FixedVariableArray(np.ndarray):
     def collapsed(self):
         return all(v.low == v.high for v in np.asarray(self).ravel())
 
-    def apply(self, fn: Callable[[NDArray], NDArray]) -> 'RetardedFixedVariableArray':
-        """Apply a unary operator to all elements, returning a RetardedFixedVariableArray."""
-        return RetardedFixedVariableArray(
+    def apply(self, fn: Callable[[NDArray], NDArray]) -> 'RetardedFVArray':
+        """Apply a unary operator to all elements, returning a RetardedFVArray."""
+        return RetardedFVArray(
             np.asarray(self),
             self.solver_options,
             operator=fn,
         )
 
     def as_new(self):
-        """Create a new FixedVariableArray with the same shape and hardware configuration, but new FixedVariable instances."""
+        """Create a new FVArray with the same shape and hardware configuration, but new FVariable instances."""
         shape = self.shape
         _arr = np.array([v._with(_from=(), opr='new', renew_id=True) for v in np.asarray(self).ravel()]).reshape(shape)
-        return FixedVariableArray(_arr, self.solver_options, hwconf=self.hwconf)
+        return FVArray(_arr, self.solver_options, hwconf=self.hwconf)
 
     if typing.TYPE_CHECKING:
 
-        def __add__(self, other) -> 'FixedVariableArray': ...
-        def __sub__(self, other) -> 'FixedVariableArray': ...  # type: ignore
-        def __mul__(self, other) -> 'FixedVariableArray': ...
-        def __truediv__(self, other) -> 'FixedVariableArray': ...  # type: ignore
-        def __matmul__(self, other) -> 'FixedVariableArray': ...
-        def __radd__(self, other) -> 'FixedVariableArray': ...
-        def __rsub__(self, other) -> 'FixedVariableArray': ...  # type: ignore
-        def __rmul__(self, other) -> 'FixedVariableArray': ...
-        def __rtruediv__(self, other) -> 'FixedVariableArray': ...  # type: ignore
-        def __rmatmul__(self, other) -> 'FixedVariableArray': ...
+        def __add__(self, other) -> 'FVArray': ...
+        def __sub__(self, other) -> 'FVArray': ...  # type: ignore
+        def __mul__(self, other) -> 'FVArray': ...
+        def __truediv__(self, other) -> 'FVArray': ...  # type: ignore
+        def __matmul__(self, other) -> 'FVArray': ...
+        def __radd__(self, other) -> 'FVArray': ...
+        def __rsub__(self, other) -> 'FVArray': ...  # type: ignore
+        def __rmul__(self, other) -> 'FVArray': ...
+        def __rtruediv__(self, other) -> 'FVArray': ...  # type: ignore
+        def __rmatmul__(self, other) -> 'FVArray': ...
 
-        def ravel(self, /, order='C') -> 'FixedVariableArray': ...
-        def reshape(self, shape, /, *, order='C', copy=None) -> 'FixedVariableArray': ...  # type: ignore
-        def transpose(self, *axes) -> 'FixedVariableArray': ...
+        def ravel(self, /, order='C') -> 'FVArray': ...
+        def reshape(self, shape, /, *, order='C', copy=None) -> 'FVArray': ...  # type: ignore
+        def transpose(self, *axes) -> 'FVArray': ...
 
 
-class FixedVariableArrayInput(FixedVariableArray):
-    """Similar to FixedVariableArray, but initializes all elements as FixedVariableInput - the precisions are unspecified when initialized, and the highest precision requested (i.e., quantized to) will be recorded for generation of the logic."""
+class FVArrayInput(FVArray):
+    """Similar to FVArray, but initializes all elements as FVariableInput - the precisions are unspecified when initialized, and the highest precision requested (i.e., quantized to) will be recorded for generation of the logic."""
 
     def __new__(
         cls,
@@ -351,7 +351,7 @@ class FixedVariableArrayInput(FixedVariableArray):
     ):
         _arr = np.empty(shape, dtype=object)
         for i in range(_arr.size):
-            _arr.ravel()[i] = FixedVariableInput(latency, hwconf)
+            _arr.ravel()[i] = FVariableInput(latency, hwconf)
         return super().__new__(cls, _arr, solver_options, hwconf=hwconf)
 
 
@@ -361,14 +361,14 @@ def make_table(fn: Callable[[NDArray], NDArray], qint: QInterval) -> LookupTable
     return LookupTable(fn(np.linspace(low, high, n)))
 
 
-class RetardedFixedVariableArray(FixedVariableArray):
-    """Ephemeral FixedVariableArray generated from operations of unspecified output precision.
-    This object translates to normal FixedVariableArray upon quantization.
-    Does not inherit the maximum precision like FixedVariableArrayInput.
+class RetardedFVArray(FVArray):
+    """Ephemeral FVArray generated from operations of unspecified output precision.
+    This object translates to normal FVArray upon quantization.
+    Does not inherit the maximum precision like FVArrayInput.
 
     This object can be used in two ways:
-    1. Quantization with specified precision, which converts to FixedVariableArray.
-    2. Apply an further unary operation, which returns another RetardedFixedVariableArray. (e.g., composite functions)
+    1. Quantization with specified precision, which converts to FVArray.
+    2. Apply an further unary operation, which returns another RetardedFVArray. (e.g., composite functions)
     """
 
     def __new__(cls, vars: NDArray, solver_options: solver_options_t | None, operator: Callable[[NDArray], NDArray]):
@@ -408,7 +408,7 @@ class RetardedFixedVariableArray(FixedVariableArray):
             # For some reason np.round is registered as array function but not ufunc...
             return self.apply(np.round).quantize()
         raise RuntimeError(
-            f'RetardedFixedVariableArray only supports quantization or further unary mapping operations. Got array function {func}.'
+            f'RetardedFVArray only supports quantization or further unary mapping operations. Got array function {func}.'
         )
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
@@ -417,8 +417,8 @@ class RetardedFixedVariableArray(FixedVariableArray):
             return v.quantize()
         return v
 
-    def apply(self, fn: Callable[[NDArray], NDArray]) -> 'RetardedFixedVariableArray':
-        return RetardedFixedVariableArray(
+    def apply(self, fn: Callable[[NDArray], NDArray]) -> 'RetardedFVArray':
+        return RetardedFVArray(
             np.asarray(self),
             self.solver_options,
             operator=lambda x: fn(self._operator(x)),
@@ -443,7 +443,7 @@ class RetardedFixedVariableArray(FixedVariableArray):
         local_tables: dict[tuple[QInterval, tuple[int, int, int]] | QInterval, LookupTable] = {}
         variables = []
         for v, _kk, _ii, _ff in zip(np.asarray(self).ravel(), _k, _i, _f):
-            v: FixedVariable
+            v: FVariable
             qint = v.qint if v._factor >= 0 else QInterval(v.qint.max, v.qint.min, v.qint.step)
             if (_kk is None) or (_ii is None) or (_ff is None):
                 op = self._operator
@@ -460,14 +460,14 @@ class RetardedFixedVariableArray(FixedVariableArray):
             variables.append(v.lookup(table))
 
         variables = np.array(variables).reshape(self.shape)
-        return FixedVariableArray(variables, self.solver_options, hwconf=self.hwconf)
+        return FVArray(variables, self.solver_options, hwconf=self.hwconf)
 
     def __repr__(self):
         return 'Retarded' + super().__repr__()
 
     @property
     def kif(self):
-        raise RuntimeError('RetardedFixedVariableArray does not have defined kif until quantized.')
+        raise RuntimeError('RetardedFVArray does not have defined kif until quantized.')
 
 
 class _ArgsortDelayedIndex:
@@ -488,7 +488,7 @@ def _np_sum(*args, **kwargs):
 @_array_fn(np.mean)
 def _np_mean(x, axis=None, **kw):
     r = reduce(lambda a, b: a + b, x, axis=axis)
-    size = r.size if isinstance(r, FixedVariableArray) else 1
+    size = r.size if isinstance(r, FVArray) else 1
     return r * (size / x.size)
 
 
@@ -516,14 +516,14 @@ _UFUNC_REDUCE[np.minimum] = _np_amin
 @_array_fn(np.all)
 def _np_all(x, axis=None, keepdims=False, **kw):
     _arr = np.array([v.unary_bit_op('any') for v in np.asarray(x).ravel()]).reshape(x.shape)
-    x2 = FixedVariableArray(_arr, x.solver_options, hwconf=x.hwconf)
+    x2 = FVArray(_arr, x.solver_options, hwconf=x.hwconf)
     return reduce(lambda a, b: a & b, x2, axis=axis, keepdims=keepdims)
 
 
 @_array_fn(np.any)
 def _np_any(x, axis=None, keepdims=False, **kw):
     _arr = np.array([v.unary_bit_op('any') for v in np.asarray(x).ravel()]).reshape(x.shape)
-    x2 = FixedVariableArray(_arr, x.solver_options, hwconf=x.hwconf)
+    x2 = FVArray(_arr, x.solver_options, hwconf=x.hwconf)
     return reduce(lambda a, b: a | b, x2, axis=axis, keepdims=keepdims)
 
 
@@ -539,7 +539,7 @@ def _np_clip(a, a_min, a_max, out=None, **kw):
     shape = _a.shape
     r = np.array([_max_of(v, lo) for v, lo in zip(_a.ravel(), _amin.ravel())])
     r = np.array([_min_of(v, hi) for v, hi in zip(r, _amax.ravel())])
-    return FixedVariableArray(r.reshape(shape), a.solver_options, hwconf=a.hwconf)
+    return FVArray(r.reshape(shape), a.solver_options, hwconf=a.hwconf)
 
 
 @_array_fn(np.einsum)
@@ -552,7 +552,7 @@ def _np_einsum(*args, **kwargs):
     operands = bind.arguments['operands']
     if isinstance(operands[0], str):
         operands = operands[1:]
-    assert len(operands) == 2, 'Einsum on FixedVariableArray requires exactly two operands'
+    assert len(operands) == 2, 'Einsum on FVArray requires exactly two operands'
     assert bind.arguments.get('out', None) is None, 'Output argument is not supported'
     return einsum(eq, *operands)
 
@@ -560,9 +560,9 @@ def _np_einsum(*args, **kwargs):
 @_array_fn(np.dot)
 def _np_dot(a, b, out=None):
     assert out is None
-    if not isinstance(a, FixedVariableArray):
+    if not isinstance(a, FVArray):
         a = np.array(a)
-    if not isinstance(b, FixedVariableArray):
+    if not isinstance(b, FVArray):
         b = np.array(b)
     if a.shape and b.shape and a.shape[-1] == b.shape[0]:
         return a @ b
@@ -572,19 +572,19 @@ def _np_dot(a, b, out=None):
 
 @_array_fn(np.where)
 def _np_where(condition, x=None, y=None):
-    fva = next(v for v in (condition, x, y) if isinstance(v, FixedVariableArray))
+    fva = next(v for v in (condition, x, y) if isinstance(v, FVArray))
     assert x is not None and y is not None, 'Only 3-arg version of np.where is supported'
-    if isinstance(condition, FixedVariableArray):
+    if isinstance(condition, FVArray):
         cond_fva = condition.to_bool('any')
         _cond, _x, _y = np.broadcast_arrays(
             np.asarray(cond_fva),
-            np.asarray(x) if isinstance(x, FixedVariableArray) else x,
-            np.asarray(y) if isinstance(y, FixedVariableArray) else y,
+            np.asarray(x) if isinstance(x, FVArray) else x,
+            np.asarray(y) if isinstance(y, FVArray) else y,
         )
         shape = _cond.shape
         r = [c.msb_mux(xv, yv) for c, xv, yv in zip(_cond.ravel(), _x.ravel(), _y.ravel())]
-        return FixedVariableArray(np.array(r).reshape(shape), fva.solver_options, hwconf=fva.hwconf)
-    return FixedVariableArray(
+        return FVArray(np.array(r).reshape(shape), fva.solver_options, hwconf=fva.hwconf)
+    return FVArray(
         np.where(condition, to_raw_arr(x), to_raw_arr(y)),
         fva.solver_options,
         hwconf=fva.hwconf,
@@ -598,47 +598,47 @@ def _np_histogram(a, bins=10, range=None, density=None, weights=None):
 
 @_array_fn(np.sort)
 def _np_sort(a, axis=-1, kind=None, order=None):
-    assert order is None, 'Sorting with order is not supported for FixedVariableArray'
+    assert order is None, 'Sorting with order is not supported for FVArray'
     return sort(a, axis=axis, kind=kind)  # type: ignore
 
 
 @_array_fn(np.argsort)
 def _np_argsort(a, axis=-1, **kw):
-    assert np.asarray(a).ndim == 1, 'Argsort on FixedVariableArray only supports 1D arrays'
+    assert np.asarray(a).ndim == 1, 'Argsort on FVArray only supports 1D arrays'
     return _ArgsortDelayedIndex((a,), {'axis': axis})
 
 
 @_ufunc(np.add, np.subtract, np.multiply, np.true_divide, np.negative)
-def _ufunc_elementwise(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
-    return FixedVariableArray(ufunc(*[to_raw_arr(x) for x in inputs], **kwargs), arr.solver_options, hwconf=arr.hwconf)
+def _ufunc_elementwise(arr: FVArray, ufunc, *inputs, **kwargs):
+    return FVArray(ufunc(*[to_raw_arr(x) for x in inputs], **kwargs), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.maximum, np.minimum)
-def _ufunc_minmax(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_minmax(arr: FVArray, ufunc, *inputs, **kwargs):
     op = _max_of if ufunc is np.maximum else _min_of
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.empty(a.size, dtype=object)
     for i in range(a.size):
         r[i] = op(a.ravel()[i], b.ravel()[i])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
-def _matmul(a: FixedVariableArray, b) -> FixedVariableArray:
+def _matmul(a: FVArray, b) -> FVArray:
     if a.collapsed:
         self_mat = np.array([v.low for v in np.asarray(a).ravel()], dtype=np.float64).reshape(a.shape)
-        if isinstance(b, FixedVariableArray):
+        if isinstance(b, FVArray):
             if not b.collapsed:
                 return self_mat @ b  # type: ignore
             other_mat = np.array([v.low for v in np.asarray(b).ravel()], dtype=np.float64).reshape(b.shape)
         else:
             other_mat = np.array(b, dtype=np.float64)
         r = self_mat @ other_mat
-        return FixedVariableArray.from_lhs(low=r, high=r, step=np.ones_like(r), hwconf=a.hwconf, solver_options=a.solver_options)
+        return FVArray.from_lhs(low=r, high=r, step=np.ones_like(r), hwconf=a.hwconf, solver_options=a.solver_options)
 
-    _b = np.asarray(b) if isinstance(b, FixedVariableArray) else np.array(b)
-    if any(isinstance(x, FixedVariable) for x in _b.ravel()):
-        return FixedVariableArray(mmm(np.asarray(a), _b), a.solver_options, hwconf=a.hwconf)
+    _b = np.asarray(b) if isinstance(b, FVArray) else np.array(b)
+    if any(isinstance(x, FVariable) for x in _b.ravel()):
+        return FVArray(mmm(np.asarray(a), _b), a.solver_options, hwconf=a.hwconf)
 
     shape0, shape1 = a.shape, _b.shape
     assert shape0[-1] == shape1[0], f'Matrix shapes do not match: {shape0} @ {shape1}'
@@ -646,10 +646,10 @@ def _matmul(a: FixedVariableArray, b) -> FixedVariableArray:
     out_shape = shape0[:-1] + shape1[1:]
     mat0, mat1 = a.reshape((-1, contract_len)), _b.reshape((contract_len, -1))
     r = [cmvm(mat1, mat0[i], (a.solver_options or {}).copy()) for i in range(mat0.shape[0])]  # type: ignore
-    return FixedVariableArray(np.array(r).reshape(out_shape), a.solver_options, hwconf=a.hwconf)
+    return FVArray(np.array(r).reshape(out_shape), a.solver_options, hwconf=a.hwconf)
 
 
-def _rmatmul(a: 'FixedVariableArray', other) -> 'FixedVariableArray':
+def _rmatmul(a: 'FVArray', other) -> 'FVArray':
     mat1 = np.moveaxis(other, -1, 0)
     mat0 = np.moveaxis(a, 0, -1)  # type: ignore
     ndim0, ndim1 = mat0.ndim, mat1.ndim
@@ -660,144 +660,144 @@ def _rmatmul(a: 'FixedVariableArray', other) -> 'FixedVariableArray':
 
 
 @_ufunc(np.matmul)
-def _ufunc_matmul(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_matmul(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = inputs
-    if isinstance(a, FixedVariableArray):
+    if isinstance(a, FVArray):
         return _matmul(a, b)
     return _rmatmul(b, a)
 
 
 @_ufunc(np.power)
-def _ufunc_power(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_power(arr: FVArray, ufunc, *inputs, **kwargs):
     base, exp = inputs
     if isinstance(exp, (int, float, np.integer, np.floating)):
         _exp = int(exp)
         if _exp == exp and _exp >= 0:
-            return FixedVariableArray(to_raw_arr(base) ** _exp, arr.solver_options, hwconf=arr.hwconf)
-    if isinstance(base, FixedVariableArray):
+            return FVArray(to_raw_arr(base) ** _exp, arr.solver_options, hwconf=arr.hwconf)
+    if isinstance(base, FVArray):
         return base.apply(lambda x: x**exp)
     raise NotImplementedError(f'Unsupported power: base={type(base)}, exp={type(exp)}')
 
 
 @_ufunc(np.abs, np.absolute)
-def _ufunc_abs(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_abs(arr: FVArray, ufunc, *inputs, **kwargs):
     r = np.array([v.__abs__() for v in np.asarray(arr).ravel()])
-    return FixedVariableArray(r.reshape(arr.shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(arr.shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.square)
-def _ufunc_square(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_square(arr: FVArray, ufunc, *inputs, **kwargs):
     return arr**2
 
 
 @_ufunc(np.greater)
-def _ufunc_greater(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_greater(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av > bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.less)
-def _ufunc_less(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_less(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av < bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.greater_equal)
-def _ufunc_greater_equal(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_greater_equal(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av >= bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.less_equal)
-def _ufunc_less_equal(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_less_equal(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av <= bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.logical_and)
-def _ufunc_logical_and(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_logical_and(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av & bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.logical_or)
-def _ufunc_logical_or(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_logical_or(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av | bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.bitwise_and)
-def _ufunc_bitwise_and(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_bitwise_and(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av & bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.bitwise_or)
-def _ufunc_bitwise_or(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_bitwise_or(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av | bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.bitwise_xor)
-def _ufunc_bitwise_xor(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_bitwise_xor(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av ^ bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.invert)
-def _ufunc_bitwise_not(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_bitwise_not(arr: FVArray, ufunc, *inputs, **kwargs):
     r = np.array([~av for av in np.asarray(arr).ravel()])
-    return FixedVariableArray(r.reshape(arr.shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(arr.shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.equal)
-def _ufunc_equal(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_equal(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av._eq(bv) for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.not_equal)
-def _ufunc_not_equal(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_not_equal(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
     r = np.array([av._ne(bv) for av, bv in zip(a.ravel(), b.ravel())])
-    return FixedVariableArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.signbit)
-def _ufunc_signbit(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_signbit(arr: FVArray, ufunc, *inputs, **kwargs):
     r = np.array([v.is_negative() for v in np.asarray(arr).ravel()])
-    return FixedVariableArray(r.reshape(arr.shape), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(r.reshape(arr.shape), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.sign)
-def _ufunc_sign(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_sign(arr: FVArray, ufunc, *inputs, **kwargs):
     not_zero = arr.to_bool('any')
     mask = not_zero + not_zero * 2
-    ret: FixedVariableArray = (1 - 2 * np.signbit(arr)) & mask  # type: ignore
+    ret: FVArray = (1 - 2 * np.signbit(arr)) & mask  # type: ignore
     return ret.quantize(1, 1, 0)
 
 
 @_ufunc(np.floor)
-def _ufunc_floor(arr: FixedVariableArray, ufunc, *inputs, **kwargs):
+def _ufunc_floor(arr: FVArray, ufunc, *inputs, **kwargs):
     return arr.quantize(f=0, round_mode='TRN')

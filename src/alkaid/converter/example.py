@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..trace import FixedVariableArray
+from ..trace import FVArray
 from ..trace.ops import quantize, relu
 from .plugin import DAISTracerPluginBase
 
@@ -53,8 +53,8 @@ class ExampleDAISTracer(DAISTracerPluginBase):
     def apply_model(
         self,
         verbose: bool,
-        inputs: tuple[FixedVariableArray, ...],
-    ) -> tuple[dict[str, FixedVariableArray], list[str]]:
+        inputs: tuple[FVArray, ...],
+    ) -> tuple[dict[str, FVArray], list[str]]:
         assert len(inputs) == 1, 'ExampleModel expects a single input.'
         x = inputs[0]
         out = operation(x)

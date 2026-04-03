@@ -10,7 +10,7 @@ The most flexible way to use alkaid is through its functional API/Explicit symbo
 # alkaid standalone example
 import numpy as np
 
-from alkaid.trace import FixedVariableArrayInput, comb_trace
+from alkaid.trace import FVArrayInput, comb_trace
 from alkaid.trace.ops import einsum, quantize, relu
 from alkaid.codegen import HLSModel, RTLModel
 
@@ -31,7 +31,7 @@ def operation(inp):
    return out
 
 # Replay the operation on symbolic tensor
-inp = FixedVariableArrayInput((4, 5))
+inp = FVArrayInput((4, 5))
 out = operation(inp)
 
 # Generate pipelined Verilog code form the traced operation

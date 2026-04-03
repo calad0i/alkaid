@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from alkaid.codegen import HLSModel, RTLModel
-from alkaid.trace import FixedVariableArray, trace
+from alkaid.trace import FVArray, trace
 from alkaid.trace.ops import quantize, relu
 from alkaid.trace.passes import optimize
 from alkaid.types import CombLogic
@@ -26,7 +26,7 @@ class OperationTest:
         np.testing.assert_equal(symbolic_out, traced_out[:100])
 
     @pytest.fixture()
-    def _comb(self, op_func, inp: FixedVariableArray):
+    def _comb(self, op_func, inp: FVArray):
         out = quantize(op_func(inp), 1, 12, 12)
         comb = trace(inp, out, optimize=False)
         return comb
@@ -44,21 +44,21 @@ class OperationTest:
         return 10000
 
     @pytest.fixture()
-    def inp(self) -> FixedVariableArray:
+    def inp(self) -> FVArray:
         b = np.random.randint(0, 9, size=8)
         i = np.random.randint(-8, 8, size=8)
         k = np.random.randint(0, 2, size=8)
-        inp = FixedVariableArray.from_kif(k, i, b - i)
+        inp = FVArray.from_kif(k, i, b - i)
         return inp
 
     @pytest.fixture(autouse=True)
-    def test_data(self, inp: FixedVariableArray, n_samples: int):
+    def test_data(self, inp: FVArray, n_samples: int):
         shape = inp.shape
         data = np.random.randn(n_samples, *shape) * 32
         return data
 
     def test_retrace(self, comb: CombLogic, _comb: CombLogic):
-        inp2 = FixedVariableArray.from_kif(*comb.inp_kifs).as_new()
+        inp2 = FVArray.from_kif(*comb.inp_kifs).as_new()
         out2 = comb(inp2, debug=True, quantize=True)
         comb2 = trace(inp2, out2)
         if not comb == comb2:
@@ -233,7 +233,7 @@ class TestBinaryBitOps(OperationTestSynth):
 
         def func(x):
             x0, x1 = x * w0, x[..., ::-1] * w1
-            if not isinstance(x, FixedVariableArray):
+            if not isinstance(x, FVArray):
                 x0, x1 = (x0 * sf).astype(np.int64), (x1 * sf).astype(np.int64)
             if request.param == 'and':
                 x = x0 & x1
@@ -244,7 +244,7 @@ class TestBinaryBitOps(OperationTestSynth):
             else:
                 raise ValueError()
 
-            if not isinstance(x, FixedVariableArray):
+            if not isinstance(x, FVArray):
                 x = x / sf
 
             return x + 3.75
@@ -258,11 +258,11 @@ class TestBitReduction(OperationTestSynth):
         return bool(request.param)
 
     @pytest.fixture()
-    def inp(self, signed) -> FixedVariableArray:
+    def inp(self, signed) -> FVArray:
         k = np.ones(8, dtype=np.int64) * signed
         i = np.full(8, 4, dtype=np.int64)
         f = np.zeros(8, dtype=np.int64)
-        inp = FixedVariableArray.from_kif(k, i, f)
+        inp = FVArray.from_kif(k, i, f)
         return inp
 
     @pytest.fixture(params=['all', 'any'])
@@ -271,7 +271,7 @@ class TestBitReduction(OperationTestSynth):
             if request.param == 'any':
                 return x != 0
             else:
-                if not isinstance(x, FixedVariableArray):
+                if not isinstance(x, FVArray):
                     return x == -1 if signed else x == 15
                 else:
                     return x.to_bool('all')
@@ -285,18 +285,18 @@ class TestBitNot(OperationTestSynth):
         return bool(request.param)
 
     @pytest.fixture()
-    def inp(self, signed) -> FixedVariableArray:
+    def inp(self, signed) -> FVArray:
         k = np.ones(8, dtype=np.int64) * signed
         i = np.full(8, 8 - signed, dtype=np.int64)
         f = np.zeros(8, dtype=np.int64)
-        inp = FixedVariableArray.from_kif(k, i, f)
+        inp = FVArray.from_kif(k, i, f)
         return inp
 
     @pytest.fixture(params=['not'])
     def op_func(self, request, signed):
         def func(x):
             if request.param == 'not':
-                if not isinstance(x, FixedVariableArray):
+                if not isinstance(x, FVArray):
                     x = x.astype(np.int8) if signed else x.astype(np.uint8)
                 x = ~x
             else:

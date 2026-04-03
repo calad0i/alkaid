@@ -96,13 +96,13 @@ class LookupTable:
             self.spec, self.table, self.mask = to_spec(values)
 
     @overload
-    def lookup(self, var: 'FixedVariable', qint_in: QInterval) -> 'FixedVariable': ...
+    def lookup(self, var: 'FVariable', qint_in: QInterval) -> 'FVariable': ...
 
     @overload
     def lookup(self, var: np.floating | float, qint_in: QInterval | tuple[float, float, float]) -> float: ...
 
     def lookup(self, var, qint_in: QInterval | tuple[float, float, float]):
-        if isinstance(var, FixedVariable):
+        if isinstance(var, FVariable):
             return var.lookup(self, original_qint=qint_in)
         else:
             _min, _max, _step = qint_in
@@ -228,7 +228,7 @@ def _unary_bit_op(a: float, op: int, qint_from: QInterval, qint_to: QInterval | 
             raise ValueError(f'Invalid unary bit op {op}')
 
 
-class FixedVariable:
+class FVariable:
     __normal__variable__ = True
 
     def __init__(
@@ -240,7 +240,7 @@ class FixedVariable:
         latency: float | None = None,
         hwconf: HWConfig | tuple[int, int, int] = HWConfig(-1, 1, -1),
         opr: str = 'new',
-        _from: tuple['FixedVariable', ...] = (),
+        _from: tuple['FVariable', ...] = (),
         _factor: float = 1.0,
         _data: int | None = None,
         _id: UUID | None = None,
@@ -248,7 +248,7 @@ class FixedVariable:
         _table: LookupTable | None = None,
     ) -> None:
         self._factor = float(_factor)
-        self._from: tuple[FixedVariable, ...] = _from
+        self._from: tuple[FVariable, ...] = _from
         self.opr = opr
         self._data = _data
         self.id = _id or UUID(int=rd.getrandbits(128), version=4)
@@ -368,16 +368,16 @@ class FixedVariable:
 
     def __repr__(self) -> str:
         if self._factor == 1:
-            return f'FixedVariable({self.low}, {self.high}, {self.step})'
-        return f'({self._factor}) FixedVariable({self.low}, {self.high}, {self.step})'
+            return f'FVariable({self.low}, {self.high}, {self.step})'
+        return f'({self._factor}) FVariable({self.low}, {self.high}, {self.step})'
 
     def __neg__(self):
         return self._with(_affine=-self._affine, _factor=-self._factor, renew_id=False)
 
-    def __add__(self, other: 'FixedVariable|float|int') -> 'FixedVariable':
+    def __add__(self, other: 'FVariable|float|int') -> 'FVariable':
         if other is None:
             return self
-        if not isinstance(other, FixedVariable):
+        if not isinstance(other, FVariable):
             # other = self.from_const(other, hwconf=self.hwconf, _factor=self._factor)
             return self._const_add(other)
         if other.high == other.low:
@@ -385,7 +385,7 @@ class FixedVariable:
         if self.high == self.low:
             return other._const_add(self.low)
 
-        assert self.hwconf == other.hwconf, f'FixedVariable must have the same hwconf, got {self.hwconf} and {other.hwconf}'
+        assert self.hwconf == other.hwconf, f'FVariable must have the same hwconf, got {self.hwconf} and {other.hwconf}'
 
         f0, f1 = self._factor, other._factor
         if f0 < 0:
@@ -396,7 +396,7 @@ class FixedVariable:
 
         _affine = self._affine + other._affine
 
-        return FixedVariable(
+        return FVariable(
             _affine=_affine,
             _from=(self, other),
             _factor=f0,
@@ -404,7 +404,7 @@ class FixedVariable:
             hwconf=self.hwconf,
         )
 
-    def _const_add(self, other: float | None) -> 'FixedVariable':
+    def _const_add(self, other: float | None) -> 'FVariable':
         if other is None:
             return self
         other = float(other)
@@ -418,7 +418,7 @@ class FixedVariable:
             shift = f_other
             data = shift << 32 | (int(other * 2**f_other) & 0xFFFFFFFF)
 
-            return FixedVariable(
+            return FVariable(
                 _affine=_affine,
                 _from=(self,),
                 _factor=self._factor,
@@ -437,15 +437,15 @@ class FixedVariable:
         other1 = (unscaled_bias + other) / sf
         return (parent + other1) * sf
 
-    def __sub__(self, other: 'FixedVariable|int|float'):
+    def __sub__(self, other: 'FVariable|int|float'):
         return self + (-other)
 
     def __truediv__(self, other: 'int|float'):
-        assert not isinstance(other, FixedVariable), 'Division by variable is not supported'
+        assert not isinstance(other, FVariable), 'Division by variable is not supported'
         return self * (1 / other)
 
-    def __mul__(self, other: 'FixedVariable|int|float') -> 'FixedVariable':
-        if isinstance(other, FixedVariable):
+    def __mul__(self, other: 'FVariable|int|float') -> 'FVariable':
+        if isinstance(other, FVariable):
             if self.high == self.low:
                 return other * self.low
             if other.high > other.low:
@@ -457,7 +457,7 @@ class FixedVariable:
             return self.from_const(float(self.low) * float(other), hwconf=self.hwconf)
 
         if np.all(other == 0):
-            return FixedVariable(0, 0, 1, hwconf=self.hwconf, opr='const')
+            return FVariable(0, 0, 1, hwconf=self.hwconf, opr='const')
 
         if log2(abs(other)) % 1 == 0:
             return self._pow2_mul(other)
@@ -471,7 +471,7 @@ class FixedVariable:
         )
         return sol([self])[0]
 
-    def _var_mul(self, other: 'FixedVariable') -> 'FixedVariable':
+    def _var_mul(self, other: 'FVariable') -> 'FVariable':
         if other is not self:
             a, b, c, d = self.high * other.low, self.low * other.high, self.high * other.high, self.low * other.low
             low = min(a, b, c, d)
@@ -489,7 +489,7 @@ class FixedVariable:
         _factor = self._factor * other._factor
         opr = 'vmul'
 
-        return FixedVariable(
+        return FVariable(
             low,
             high,
             step,
@@ -518,21 +518,21 @@ class FixedVariable:
         shift_amount = 2.0**-other
         return self * shift_amount
 
-    def __radd__(self, other: 'float|int|FixedVariable'):
+    def __radd__(self, other: 'float|int|FVariable'):
         return self + other
 
-    def __rsub__(self, other: 'float|int|FixedVariable'):
+    def __rsub__(self, other: 'float|int|FVariable'):
         return (-self) + other
 
-    def __rmul__(self, other: 'float|int|FixedVariable'):
+    def __rmul__(self, other: 'float|int|FVariable'):
         return self * other
 
-    def __pow__(self, other) -> 'FixedVariable':
+    def __pow__(self, other) -> 'FVariable':
         _power = int(other)
         assert _power == other, 'Power must be an integer'
         assert _power >= 0, 'Power must be non-negative'
         if _power == 0:
-            return FixedVariable(1, 1, 1, hwconf=self.hwconf, opr='const')
+            return FVariable(1, 1, 1, hwconf=self.hwconf, opr='const')
         if _power == 1:
             return self
 
@@ -575,7 +575,7 @@ class FixedVariable:
         if self.low == low and self.high == high and self.step == step:
             return self
 
-        return FixedVariable(
+        return FVariable(
             low,
             high,
             step,
@@ -592,7 +592,7 @@ class FixedVariable:
         f: int,
         overflow_mode: str = 'WRAP',
         round_mode: str = 'TRN',
-    ) -> 'FixedVariable':
+    ) -> 'FVariable':
         """Quantize the variable to the specified fixed-point format.
 
         Parameters
@@ -615,7 +615,7 @@ class FixedVariable:
 
         k, i, f = int(k), int(i), int(f)
         if k + i + f <= 0:
-            return FixedVariable(0, 0, 1, hwconf=self.hwconf, opr='const')
+            return FVariable(0, 0, 1, hwconf=self.hwconf, opr='const')
 
         _k, _i, _f = map(int, self.kif)
 
@@ -626,7 +626,7 @@ class FixedVariable:
         if f < _f and round_mode == 'RND':
             return (self + 2.0 ** (-f - 1)).quantize(k, i, f, overflow_mode, 'TRN')
         elif f < _f and round_mode == 'RND_CONV' and overflow_mode == 'WRAP':
-            off: FixedVariable = self + 2.0 ** (-f - 1)
+            off: FVariable = self + 2.0 ** (-f - 1)
             roundup = off._wrap(k, i, f)
             (not_multiple) = off.bits[-_f + f :].unary_bit_op('any') * 2.0**-f
             v = ((not_multiple) & roundup.bits[-1:]) + roundup.bits[:-1]
@@ -647,7 +647,7 @@ class FixedVariable:
             _high = 2.0**i
             high, low = _high - step, -_high * k
             val = (floor(val / step) * step - low) % (2 * _high) + low
-            return FixedVariable.from_const(val, hwconf=self.hwconf)
+            return FVariable.from_const(val, hwconf=self.hwconf)
 
         return self._wrap(k, i, f)
 
@@ -663,19 +663,19 @@ class FixedVariable:
 
         # target MSB below source LSB
         if k + i + _f <= 0:
-            return FixedVariable.from_const(0.0, hwconf=self.hwconf)
+            return FVariable.from_const(0.0, hwconf=self.hwconf)
 
         # target LSB above source MSB (level _k+_i-1)
         if _k and f <= -_k - _i:
             if self.low >= 0:
-                return FixedVariable.from_const(0.0, hwconf=self.hwconf)
+                return FVariable.from_const(0.0, hwconf=self.hwconf)
             all_ones = -step if k else 2.0**i - step
             if self.high < 0:
-                return FixedVariable.from_const(all_ones, hwconf=self.hwconf)
+                return FVariable.from_const(all_ones, hwconf=self.hwconf)
             low_v, high_v = (all_ones, 0.0) if k else (0.0, all_ones)
-            return FixedVariable(low_v, high_v, step, _from=(self,), _factor=abs(self._factor), opr='wrap', hwconf=self.hwconf)
+            return FVariable(low_v, high_v, step, _from=(self,), _factor=abs(self._factor), opr='wrap', hwconf=self.hwconf)
         if not _k and f <= -_i:
-            return FixedVariable.from_const(0.0, hwconf=self.hwconf)
+            return FVariable.from_const(0.0, hwconf=self.hwconf)
 
         # overlap
         target_low = -int(k) * 2.0**i
@@ -688,7 +688,7 @@ class FixedVariable:
         else:
             low, high = target_low, target_high
 
-        return FixedVariable(
+        return FVariable(
             low,
             high,
             step,
@@ -707,18 +707,18 @@ class FixedVariable:
 
     def msb_mux(
         self,
-        a: 'FixedVariable|float',
-        b: 'FixedVariable|float',
+        a: 'FVariable|float',
+        b: 'FVariable|float',
         qint: tuple[float, float, float] | None = None,
-    ) -> 'FixedVariable':
+    ) -> 'FVariable':
         """If the MSB of this variable is 1, return a, else return b.
         When the variable is signed, the MSB is determined by the sign bit (1 for <0, 0 for >=0)
         """
 
-        if not isinstance(a, FixedVariable):
-            a = FixedVariable.from_const(a, hwconf=self.hwconf)
-        if not isinstance(b, FixedVariable):
-            b = FixedVariable.from_const(b, hwconf=self.hwconf)
+        if not isinstance(a, FVariable):
+            a = FVariable.from_const(a, hwconf=self.hwconf)
+        if not isinstance(b, FVariable):
+            b = FVariable.from_const(b, hwconf=self.hwconf)
 
         if b.opr == 'const' and b.low == 0:
             c = self.msb()
@@ -761,7 +761,7 @@ class FixedVariable:
             _factor = a._factor
             b = b._with(_factor=a._factor, renew_id=True)
 
-        return FixedVariable(
+        return FVariable(
             *qint,
             _from=(self, a, b),
             _factor=abs(_factor),
@@ -769,18 +769,18 @@ class FixedVariable:
             hwconf=self.hwconf,
         )
 
-    def is_negative(self) -> 'FixedVariable':
+    def is_negative(self) -> 'FVariable':
         if self.low >= 0:
             return self.from_const(0, hwconf=self.hwconf)
         if self.high < 0:
             return self.from_const(1, hwconf=self.hwconf)
         return self.msb()
 
-    def msb(self) -> 'FixedVariable':
+    def msb(self) -> 'FVariable':
         k, i, _ = self.kif
         return self.quantize(0, i + k, -i - k + 1) >> i + k - 1
 
-    def is_positive(self) -> 'FixedVariable':
+    def is_positive(self) -> 'FVariable':
         return (-self).is_negative()
 
     def __abs__(self):
@@ -794,10 +794,10 @@ class FixedVariable:
         """Get the absolute value of this variable."""
         return abs(self)
 
-    def __gt__(self, other: 'FixedVariable|float|int'):
+    def __gt__(self, other: 'FVariable|float|int'):
         """Get a variable that is 1 if this variable is greater than other, else 0."""
-        if not isinstance(other, FixedVariable) or other.opr == 'const':
-            _other = float(other) if not isinstance(other, FixedVariable) else other.low
+        if not isinstance(other, FVariable) or other.opr == 'const':
+            _other = float(other) if not isinstance(other, FVariable) else other.low
             _other_align = ceil(_other / self.step) * self.step
             if _other != _other_align:
                 return self >= _other_align
@@ -805,10 +805,10 @@ class FixedVariable:
                 return self._ne(other)
         return (self - other).is_positive()
 
-    def __lt__(self, other: 'FixedVariable|float|int'):
+    def __lt__(self, other: 'FVariable|float|int'):
         """Get a variable that is 1 if this variable is less than other, else 0."""
-        if not isinstance(other, FixedVariable) or other.opr == 'const':
-            _other = float(other) if not isinstance(other, FixedVariable) else other.low
+        if not isinstance(other, FVariable) or other.opr == 'const':
+            _other = float(other) if not isinstance(other, FVariable) else other.low
             _other_align = ceil(_other / self.step) * self.step
             if _other != _other_align:
                 return self < _other_align
@@ -816,11 +816,11 @@ class FixedVariable:
                 return self._ne(other)
         return (other - self).is_positive()
 
-    def __ge__(self, other: 'FixedVariable|float|int'):
+    def __ge__(self, other: 'FVariable|float|int'):
         """Get a variable that is 1 if this variable is greater than or equal to other, else 0."""
         return ~(self < other)
 
-    def __le__(self, other: 'FixedVariable|float|int'):
+    def __le__(self, other: 'FVariable|float|int'):
         """Get a variable that is 1 if this variable is less than or equal to other, else 0."""
         return ~(self > other)
 
@@ -830,8 +830,8 @@ class FixedVariable:
             return self
         if other == float('inf'):
             raise ValueError('Cannot apply max_of with inf')
-        if not isinstance(other, FixedVariable):
-            other = FixedVariable.from_const(other, hwconf=self.hwconf)
+        if not isinstance(other, FVariable):
+            other = FVariable.from_const(other, hwconf=self.hwconf)
 
         if self.low >= other.high:
             return self
@@ -851,8 +851,8 @@ class FixedVariable:
             return self
         if other == -float('inf'):
             raise ValueError('Cannot apply min_of with -inf')
-        if not isinstance(other, FixedVariable):
-            other = FixedVariable.from_const(other, hwconf=self.hwconf)
+        if not isinstance(other, FVariable):
+            other = FVariable.from_const(other, hwconf=self.hwconf)
 
         if self.high <= other.low:
             return self
@@ -865,7 +865,7 @@ class FixedVariable:
         qint = (float(_qint[0]), float(_qint[1]), float(_qint[2]))
         return (self - other).msb_mux(self, other, qint=qint)
 
-    def lookup(self, table: LookupTable | np.ndarray, original_qint: tuple[float, float, float] | None = None) -> 'FixedVariable':
+    def lookup(self, table: LookupTable | np.ndarray, original_qint: tuple[float, float, float] | None = None) -> 'FVariable':
         """Use a lookup table to map the variable.
 
         Parameters
@@ -877,7 +877,7 @@ class FixedVariable:
 
         Returns
         -------
-        FixedVariable
+        FVariable
         """
 
         size = len(table)
@@ -913,7 +913,7 @@ class FixedVariable:
             key = self if self._factor > 0 else -self
             return (key - key.low).msb_mux(b, a)
 
-        return FixedVariable(
+        return FVariable(
             *table.spec.out_qint, _from=(self,), _factor=1.0, opr='lookup', hwconf=self.hwconf, _data=None, _table=table
         )
 
@@ -936,7 +936,7 @@ class FixedVariable:
             if self.opr == 'bit_unary' and self._data == 0:
                 return self._from[0] * (self._factor / self._from[0]._factor)
             k, i, f = self.kif
-            return FixedVariable.from_kif(
+            return FVariable.from_kif(
                 k, i, f, hwconf=self.hwconf, opr='bit_unary', _data=_data, _from=(self,), _factor=abs(self._factor)
             )
         if _type == 'all':
@@ -949,9 +949,9 @@ class FixedVariable:
                 if _max % 1 != 0:
                     return self.from_const(0, hwconf=self.hwconf)
 
-        return FixedVariable(0, 1, 1, hwconf=self.hwconf, opr='bit_unary', _data=int(_data), _from=(self,), _factor=1)
+        return FVariable(0, 1, 1, hwconf=self.hwconf, opr='bit_unary', _data=int(_data), _from=(self,), _factor=1)
 
-    def binary_bit_op(self, other: 'FixedVariable', _type: str):
+    def binary_bit_op(self, other: 'FVariable', _type: str):
         ops = {
             'and': 0,
             'or': 1,
@@ -1000,40 +1000,38 @@ class FixedVariable:
                     return self.unary_bit_op('not').quantize(k, i, f)
 
         _data = ops[_type]
-        return FixedVariable(
-            *qint, hwconf=self.hwconf, opr='bit_binary', _data=_data, _from=(self, other), _factor=abs(self._factor)
-        )
+        return FVariable(*qint, hwconf=self.hwconf, opr='bit_binary', _data=_data, _from=(self, other), _factor=abs(self._factor))
 
-    def __and__(self, other: 'FixedVariable|float|int'):
-        if not isinstance(other, FixedVariable):
-            other = FixedVariable.from_const(other, hwconf=self.hwconf)
+    def __and__(self, other: 'FVariable|float|int'):
+        if not isinstance(other, FVariable):
+            other = FVariable.from_const(other, hwconf=self.hwconf)
         return self.binary_bit_op(other, 'and')
 
-    def __or__(self, other: 'FixedVariable|float|int'):
-        if not isinstance(other, FixedVariable):
-            other = FixedVariable.from_const(other, hwconf=self.hwconf)
+    def __or__(self, other: 'FVariable|float|int'):
+        if not isinstance(other, FVariable):
+            other = FVariable.from_const(other, hwconf=self.hwconf)
         return self.binary_bit_op(other, 'or')
 
-    def __xor__(self, other: 'FixedVariable|float|int'):
-        if not isinstance(other, FixedVariable):
-            other = FixedVariable.from_const(other, hwconf=self.hwconf)
+    def __xor__(self, other: 'FVariable|float|int'):
+        if not isinstance(other, FVariable):
+            other = FVariable.from_const(other, hwconf=self.hwconf)
         return self.binary_bit_op(other, 'xor')
 
-    def __rand__(self, other: 'float|int|FixedVariable'):
+    def __rand__(self, other: 'float|int|FVariable'):
         return self.__and__(other)
 
-    def __ror__(self, other: 'float|int|FixedVariable'):
+    def __ror__(self, other: 'float|int|FVariable'):
         return self.__or__(other)
 
-    def __rxor__(self, other: 'float|int|FixedVariable'):
+    def __rxor__(self, other: 'float|int|FVariable'):
         return self.__xor__(other)
 
     def __invert__(self):
         return self.unary_bit_op('not')
 
     def _ne(self, other):
-        if not isinstance(other, FixedVariable):
-            other = FixedVariable.from_const(other, hwconf=self.hwconf)
+        if not isinstance(other, FVariable):
+            other = FVariable.from_const(other, hwconf=self.hwconf)
         return (self ^ other).unary_bit_op('any')
 
     def _eq(self, other):
@@ -1045,7 +1043,7 @@ class FixedVariable:
 
 
 class BitsView:
-    def __init__(self, var: FixedVariable):
+    def __init__(self, var: FVariable):
         self.var = var
 
     def __getitem__(self, idx: slice):
@@ -1066,7 +1064,7 @@ class BitsView:
         return self.var._wrap(new_k, new_i, new_f)
 
 
-class FixedVariableInput(FixedVariable):
+class FVariableInput(FVariable):
     __normal__variable__ = False
 
     def __init__(
@@ -1156,7 +1154,7 @@ class FixedVariableInput(FixedVariable):
         k, i, f = int(k), int(i), int(f)
 
         if k + i + f <= 0:
-            return FixedVariable(0, 0, 1, hwconf=self.hwconf, opr='const')
+            return FVariable(0, 0, 1, hwconf=self.hwconf, opr='const')
 
         if round_mode == 'RND':
             return (self.quantize(k, i, f + 1) + 2.0 ** (-f - 1)).quantize(k, i, f, overflow_mode, 'TRN')
@@ -1174,7 +1172,7 @@ class FixedVariableInput(FixedVariable):
         # Rebuild affine from accumulated bounds
         self._affine = AffineInterval.new(QInterval(self._bounds_low, self._bounds_high, self._bounds_step))
 
-        return FixedVariable(
+        return FVariable(
             low,
             high,
             step,

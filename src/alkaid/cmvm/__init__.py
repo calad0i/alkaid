@@ -8,7 +8,7 @@ from .._binary import kernel_decompose, solve
 from ..types import CombLogic, Op, QInterval
 
 if typing.TYPE_CHECKING:
-    from ..trace import FixedVariableArray
+    from ..trace import FVArray
 
 
 class solver_options_t(TypedDict, total=False):
@@ -18,7 +18,7 @@ class solver_options_t(TypedDict, total=False):
     decompose_dc: int
     adder_size: int
     search_all_decompose_dc: bool
-    offload_fn: None | Callable[[np.ndarray, 'FixedVariableArray'], np.ndarray]
+    offload_fn: None | Callable[[np.ndarray, 'FVArray'], np.ndarray]
     """
     Callable taking in (constant_matrix, fixed_variable_array) and returning
     a boolean mask of which weights to offload to multiplication operations.

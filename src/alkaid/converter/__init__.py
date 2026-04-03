@@ -2,7 +2,7 @@ from importlib.metadata import EntryPoint, entry_points
 from typing import Any, Literal, overload
 
 from ..cmvm import solver_options_t
-from ..trace import FixedVariableArray, HWConfig
+from ..trace import FVArray, HWConfig
 from .plugin import DAISTracerPluginBase
 
 __all__ = ['trace_model']
@@ -22,12 +22,12 @@ def trace_model(  # type: ignore
     hwconf: HWConfig | tuple[int, int, int] = HWConfig(1, 1, -1),
     solver_options: solver_options_t | None = None,
     verbose: bool = False,
-    inputs: tuple[FixedVariableArray, ...] | FixedVariableArray | None = None,
+    inputs: tuple[FVArray, ...] | FVArray | None = None,
     inputs_kif: tuple[int, int, int] | None = None,
     dump: Literal[False] = False,
     framework: None | str = None,
     **kwargs: Any,
-) -> tuple[FixedVariableArray, FixedVariableArray]: ...
+) -> tuple[FVArray, FVArray]: ...
 
 
 @overload
@@ -36,12 +36,12 @@ def trace_model(  # type: ignore
     hwconf: HWConfig | tuple[int, int, int] = HWConfig(1, 1, -1),
     solver_options: solver_options_t | None = None,
     verbose: bool = False,
-    inputs: tuple[FixedVariableArray, ...] | FixedVariableArray | None = None,
+    inputs: tuple[FVArray, ...] | FVArray | None = None,
     inputs_kif: tuple[int, int, int] | None = None,
     dump: Literal[True] = False,  # type: ignore
     framework: None | str = None,
     **kwargs: Any,
-) -> dict[str, FixedVariableArray]: ...
+) -> dict[str, FVArray]: ...
 
 
 def trace_model(  # type: ignore
@@ -49,7 +49,7 @@ def trace_model(  # type: ignore
     hwconf: HWConfig | tuple[int, int, int] = HWConfig(1, 1, -1),
     solver_options: solver_options_t | None = None,
     verbose: bool = False,
-    inputs: tuple[FixedVariableArray, ...] | None = None,
+    inputs: tuple[FVArray, ...] | None = None,
     inputs_kif: tuple[int, int, int] | None = None,
     dump=False,
     framework: None | str = None,

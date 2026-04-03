@@ -8,12 +8,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 if typing.TYPE_CHECKING:
-    from ..fixed_variable import FixedVariable
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable import FVariable
+    from ..fixed_variable_array import FVArray
 
 
-T = typing.TypeVar('T', 'FixedVariable', float, np.floating)
-TA = TypeVar('TA', 'FixedVariableArray', NDArray[np.integer | np.floating])
+T = typing.TypeVar('T', 'FVariable', float, np.floating)
+TA = TypeVar('TA', 'FVArray', NDArray[np.integer | np.floating])
 
 
 class Packet:
@@ -21,12 +21,12 @@ class Packet:
         self.value = v
 
     def __gt__(self, other: 'Packet') -> bool:  # type: ignore
-        from ..fixed_variable_array import FixedVariable
+        from ..fixed_variable_array import FVariable
 
         a, b = self.value, other.value
 
-        if isinstance(a, FixedVariable):
-            if isinstance(b, FixedVariable):
+        if isinstance(a, FVariable):
+            if isinstance(b, FVariable):
                 la, lb = round(a.latency), round(b.latency)
                 if la != lb:
                     return la > lb
@@ -44,7 +44,7 @@ class Packet:
 
 
 def _reduce(operator: Callable[[T, T], T], arr: Sequence[T]) -> T:
-    from ..fixed_variable_array import FixedVariable
+    from ..fixed_variable_array import FVariable
 
     if isinstance(arr, np.ndarray):
         arr = arr.ravel().tolist()
@@ -52,7 +52,7 @@ def _reduce(operator: Callable[[T, T], T], arr: Sequence[T]) -> T:
     if len(arr) == 1:
         return arr[0]
     dtype = arr[0].__class__
-    if not issubclass(dtype, FixedVariable):
+    if not issubclass(dtype, FVariable):
         r = operator(arr[0], arr[1])
         for i in range(2, len(arr)):
             r = operator(r, arr[i])
@@ -72,9 +72,9 @@ def reduce(operator: Callable[[T, T], T], x: TA, axis: int | Sequence[int] | Non
     """
     Reduce the array by summing over the specified axis.
     """
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
-    if isinstance(x, FixedVariableArray):
+    if isinstance(x, FVArray):
         solver_config = x.solver_options
         arr = np.asarray(x)
     else:
@@ -97,8 +97,8 @@ def reduce(operator: Callable[[T, T], T], x: TA, axis: int | Sequence[int] | Non
     _arr = np.array([_reduce(operator, _arr[i]) for i in range(_arr.shape[0])])
     r = _arr.reshape(target_shape)  # type: ignore
 
-    if isinstance(x, FixedVariableArray):
-        r = FixedVariableArray(r, solver_config)
+    if isinstance(x, FVArray):
+        r = FVArray(r, solver_config)
         if r.shape == ():
             return r.item()  # type: ignore
     return r if r.shape != () or keepdims else r.item()  # type: ignore

@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 if TYPE_CHECKING:
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
 
 class EinsumRecipe(TypedDict):
@@ -273,15 +273,15 @@ def _einsum(fn: str, input0, input1) -> np.ndarray:
 
 
 @overload
-def einsum(fn: str, input0: 'FixedVariableArray', input1: 'FixedVariableArray') -> 'FixedVariableArray': ...
+def einsum(fn: str, input0: 'FVArray', input1: 'FVArray') -> 'FVArray': ...
 
 
 @overload
-def einsum(fn: str, input0: 'FixedVariableArray', input1: NDArray[np.integer | np.floating]) -> 'FixedVariableArray': ...
+def einsum(fn: str, input0: 'FVArray', input1: NDArray[np.integer | np.floating]) -> 'FVArray': ...
 
 
 @overload
-def einsum(fn: str, input0: NDArray[np.integer | np.floating], input1: 'FixedVariableArray') -> 'FixedVariableArray': ...
+def einsum(fn: str, input0: NDArray[np.integer | np.floating], input1: 'FVArray') -> 'FVArray': ...
 
 
 @overload
@@ -291,16 +291,16 @@ def einsum(
 
 
 def einsum(fn: str, input0, input1):
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
-    fg0 = isinstance(input0, FixedVariableArray)
-    fg1 = isinstance(input1, FixedVariableArray)
+    fg0 = isinstance(input0, FVArray)
+    fg1 = isinstance(input1, FVArray)
 
     r = _einsum(fn, input0, input1)
 
     if fg0:
-        return FixedVariableArray(r, input0.solver_options)
+        return FVArray(r, input0.solver_options)
     elif fg1:
-        return FixedVariableArray(r, input1.solver_options)
+        return FVArray(r, input1.solver_options)
     else:
         return r

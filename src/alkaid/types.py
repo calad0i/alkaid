@@ -16,7 +16,7 @@ DAIS_SPEC_VERSION = 2
 
 
 if TYPE_CHECKING:
-    from .trace import FixedVariable, FixedVariableArray
+    from .trace import FVariable, FVArray
     from .trace.fixed_variable import LookupTable
 
 
@@ -131,14 +131,14 @@ def minimal_kif(qi: QInterval, symmetric: bool = False) -> Precision:
     return Precision(keep_negative=keep_negative, integers=integers, fractional=fractional)
 
 
-T = TypeVar('T', 'FixedVariable', float, int, np.float32, np.float64)
+T = TypeVar('T', 'FVariable', float, int, np.float32, np.float64)
 
 
 @singledispatch
 def _relu(v: 'T', i: int | None = None, f: int | None = None, round_mode: str = 'TRN') -> 'T':
-    from .trace.fixed_variable import FixedVariable
+    from .trace.fixed_variable import FVariable
 
-    assert isinstance(v, FixedVariable), f'Unknown type {type(v)} for symbolic relu'
+    assert isinstance(v, FVariable), f'Unknown type {type(v)} for symbolic relu'
     return v.relu(i, f, round_mode=round_mode)
 
 
@@ -160,9 +160,9 @@ def _(v, i: int | None = None, f: int | None = None, round_mode: str = 'TRN'):
 
 @singledispatch
 def _quantize(v: 'T', k: int | bool, i: int, f: int, round_mode: str = 'TRN') -> 'T':
-    from .trace.fixed_variable import FixedVariable
+    from .trace.fixed_variable import FVariable
 
-    assert isinstance(v, FixedVariable), f'Unknown type {type(v)} for symbolic quantization'
+    assert isinstance(v, FVariable), f'Unknown type {type(v)} for symbolic quantization'
     return v.quantize(k, i, f, round_mode=round_mode)
 
 
@@ -227,7 +227,7 @@ class CombLogic(NamedTuple):
     adder_size: int
     lookup_tables: 'tuple[LookupTable, ...] | None' = None
 
-    def __call__(self, inp: 'list | np.ndarray | tuple | FixedVariableArray', quantize=True, debug=False, dump=False):
+    def __call__(self, inp: 'list | np.ndarray | tuple | FVArray', quantize=True, debug=False, dump=False):
         """Executes the solution on the input data.
 
         Parameters
@@ -320,7 +320,7 @@ class CombLogic(NamedTuple):
         return out_buf * sf * sign
 
     def exec_op(self, op: Op, buf: np.ndarray, inp: np.ndarray):
-        from .trace.fixed_variable import FixedVariable
+        from .trace.fixed_variable import FVariable
         from .trace.ops.bit_oprs import binary_bit_op, unary_bit_op
 
         match op.opcode:
@@ -351,7 +351,7 @@ class CombLogic(NamedTuple):
                 k, v0, v1 = buf[id_c], buf[op.id0], buf[op.id1]
                 shift = (((op.data >> 32) & 0xFFFFFFFF) + (1 << 31)) % (1 << 32) - (1 << 31)
 
-                if isinstance(k, FixedVariable):
+                if isinstance(k, FVariable):
                     ret = k.msb_mux(v0, v1 * 2**shift, op.qint)  # type: ignore
                 else:
                     qint_k = self.ops[id_c].qint

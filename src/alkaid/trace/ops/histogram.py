@@ -1,4 +1,4 @@
-"""Histogram operation for FixedVariable arrays using thermometer code counting."""
+"""Histogram operation for FVariable arrays using thermometer code counting."""
 
 import typing
 from typing import Literal
@@ -7,18 +7,18 @@ import numpy as np
 from numpy.typing import NDArray
 
 if typing.TYPE_CHECKING:
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
 _range = range
 
 
 def histogram(
-    a: 'FixedVariableArray | NDArray',
+    a: 'FVArray | NDArray',
     bins: 'int | NDArray' = 10,
     range: 'tuple[float, float] | None' = None,
-    weights: 'FixedVariableArray | NDArray | None' = None,
+    weights: 'FVArray | NDArray | None' = None,
     density: Literal[False] = False,
-) -> 'tuple[FixedVariableArray | NDArray, NDArray]':
+) -> 'tuple[FVArray | NDArray, NDArray]':
     """Compute histogram using thermometer code counting.
 
     Bin edges must be compile-time constants. Only internal edges are compared;
@@ -26,14 +26,14 @@ def histogram(
 
     Parameters
     ----------
-    a : FixedVariableArray or ndarray
+    a : FVArray or ndarray
         Input data. Flattened before processing.
     bins : int or 1-D array-like
         If int: number of equal-width bins (``range`` required).
         If array: monotonically increasing bin edges.
     range : (float, float) or None
         Required when ``bins`` is an int.
-    weights : FixedVariableArray or ndarray or None
+    weights : FVArray or ndarray or None
         Per-element weights (same shape as ``a``). When given, each element
         contributes its weight instead of 1 to the bin count.
     density : bool
@@ -41,14 +41,14 @@ def histogram(
 
     Returns
     -------
-    counts : FixedVariableArray or ndarray
+    counts : FVArray or ndarray
     bin_edges : ndarray
     """
-    from ..fixed_variable_array import FixedVariableArray
+    from ..fixed_variable_array import FVArray
 
     assert not density, 'density=True is not supported'
 
-    if not isinstance(a, FixedVariableArray):
+    if not isinstance(a, FVArray):
         return np.histogram(a, bins=bins, range=range, weights=weights)
 
     if isinstance(bins, (int, np.integer)):
@@ -76,7 +76,7 @@ def histogram(
         _weights = 1
 
     if M == 0:
-        return FixedVariableArray(np.zeros(len(edges) - 1), a.solver_options, hwconf=a.hwconf), edges
+        return FVArray(np.zeros(len(edges) - 1), a.solver_options, hwconf=a.hwconf), edges
 
     # Thermometer encoding
 
