@@ -1,22 +1,22 @@
-#include "DAISInterpreter.hh"
+#include "ALIRInterpreter.hh"
 #include <cstring>
 #include <stdexcept>
 #include <fstream>
 #include <iostream>
 #include <cmath>
 
-namespace dais {
+namespace alir {
 
-    void DAISInterpreter::load_from_binary(const std::span<const int32_t> &binary_data) {
+    void ALIRInterpreter::load_from_binary(const std::span<const int32_t> &binary_data) {
         if (binary_data.size() < 6) {
             throw std::runtime_error(
-                "Binary data too small to contain valid DAIS model file"
+                "Binary data too small to contain valid ALIR model file"
             );
         }
-        if (binary_data[0] != dais_version) {
+        if (binary_data[0] != alir_version) {
             throw std::runtime_error(
-                "DAIS version mismatch: expected version " +
-                std::to_string(dais_version) + ", got version " +
+                "ALIR version mismatch: expected version " +
+                std::to_string(alir_version) + ", got version " +
                 std::to_string(binary_data[0])
             );
         }
@@ -90,7 +90,7 @@ namespace dais {
         validate();
     }
 
-    void DAISInterpreter::load_from_file(const std::string &path) {
+    void ALIRInterpreter::load_from_file(const std::string &path) {
         std::ifstream file(path, std::ios::binary);
         if (!file)
             throw std::runtime_error("Failed to open file: " + path);
@@ -103,7 +103,7 @@ namespace dais {
             throw std::runtime_error("File size is not a multiple of int32_t size");
         if (file_size < 3 * sizeof(int32_t))
             throw std::runtime_error(
-                "File size is too small to contain valid DAIS model file"
+                "File size is too small to contain valid ALIR model file"
             );
         size_t num_elements = file_size / sizeof(int32_t);
         binary_data.resize(num_elements);
@@ -111,7 +111,7 @@ namespace dais {
         load_from_binary(binary_data);
     }
 
-    int64_t DAISInterpreter::shift_add(
+    int64_t ALIRInterpreter::shift_add(
         int64_t v1,
         int64_t v2,
         int32_t shift,
@@ -136,7 +136,7 @@ namespace dais {
         return result;
     }
 
-    int64_t DAISInterpreter::quantize(
+    int64_t ALIRInterpreter::quantize(
         int64_t value,
         const DType &dtype_from,
         const DType &dtype_to
@@ -151,7 +151,7 @@ namespace dais {
         return value;
     }
 
-    int64_t DAISInterpreter::relu(
+    int64_t ALIRInterpreter::relu(
         int64_t value,
         const DType &dtype_from,
         const DType &dtype_to
@@ -161,7 +161,7 @@ namespace dais {
         return quantize(value, dtype_from, dtype_to);
     }
 
-    int64_t DAISInterpreter::const_add(
+    int64_t ALIRInterpreter::const_add(
         int64_t value,
         const DType dtype_from,
         const DType dtype_to,
@@ -187,13 +187,13 @@ namespace dais {
         return result;
     }
 
-    bool DAISInterpreter::get_msb(int64_t value, const DType &dtype) const {
+    bool ALIRInterpreter::get_msb(int64_t value, const DType &dtype) const {
         // if (dtype.is_signed)
         //     return value < 0;
         return (value >> (dtype.width() - 1)) & 1;
     }
 
-    int64_t DAISInterpreter::msb_mux(
+    int64_t ALIRInterpreter::msb_mux(
         int64_t v0,
         int64_t v1,
         int64_t v_cond,
@@ -227,7 +227,7 @@ namespace dais {
         return quantize(result, dtype_in, dtype_out);
     }
 
-    int64_t DAISInterpreter::logic_lookup(
+    int64_t ALIRInterpreter::logic_lookup(
         const int64_t v0,
         const Op &op,
         const DType dtype_in
@@ -249,7 +249,7 @@ namespace dais {
         return static_cast<int64_t>(table[index]);
     }
 
-    int64_t DAISInterpreter::bit_unary(int64_t v, const Op &op) const {
+    int64_t ALIRInterpreter::bit_unary(int64_t v, const Op &op) const {
         int64_t mask = (1LL << ops[op.id0].dtype.width()) - 1;
         switch (op.data_low) {
         case 0: // NOT
@@ -270,7 +270,7 @@ namespace dais {
         }
     }
 
-    int64_t DAISInterpreter::bit_binary(int64_t v1, int64_t v2, const Op &op) const {
+    int64_t ALIRInterpreter::bit_binary(int64_t v1, int64_t v2, const Op &op) const {
         int32_t actual_shift =
             op.data_low + ops[op.id0].dtype.fractionals - ops[op.id1].dtype.fractionals;
         if (actual_shift > 0) {
@@ -295,7 +295,7 @@ namespace dais {
         }
     }
 
-    std::vector<int64_t> DAISInterpreter::exec_ops(
+    std::vector<int64_t> ALIRInterpreter::exec_ops(
         const std::span<const double> &inputs,
         bool verbose,
         bool dump
@@ -393,7 +393,7 @@ namespace dais {
         return output_buffer;
     }
 
-    void DAISInterpreter::inference(
+    void ALIRInterpreter::inference(
         const std::span<const double> &inputs,
         std::span<double> &outputs,
         bool verbose,
@@ -415,7 +415,7 @@ namespace dais {
         }
     }
 
-    std::vector<double> DAISInterpreter::inference(
+    std::vector<double> ALIRInterpreter::inference(
         const std::span<const double> &inputs,
         bool verbose,
         bool dump
@@ -430,7 +430,7 @@ namespace dais {
         return outputs;
     }
 
-    void DAISInterpreter::print_program_info() const {
+    void ALIRInterpreter::print_program_info() const {
         size_t bits_in = 0, bits_out = 0;
         for (size_t i = 0; i < n_ops; ++i) {
             const Op op = ops[i];
@@ -441,14 +441,14 @@ namespace dais {
             if (out_idxs[i] >= 0)
                 bits_out += ops[out_idxs[i]].dtype.width();
         }
-        std::cout << "DAIS Sequence:\n";
+        std::cout << "ALIR Sequence:\n";
         std::cout << n_in << " (" << bits_in << " bits) -> " << n_out << " (" << bits_out
                   << " bits)\n";
         std::cout << "# operations: " << n_ops << "\n";
         std::cout << "Maximum intermediate width: " << max_ops_width << " bits\n";
     }
 
-    void DAISInterpreter::validate() const {
+    void ALIRInterpreter::validate() const {
         for (size_t i = 0; i < n_ops; ++i) // Causality check
         {
             const Op &op = ops[i];
@@ -477,4 +477,4 @@ namespace dais {
                          "network, so you may want to check your model.\n";
         }
     }
-} // namespace dais
+} // namespace alir

@@ -19,9 +19,9 @@ def _flatten_arr(args: Any) -> FVArray:
     return np.concatenate(args)  # type: ignore
 
 
-class DAISTracerPluginBase:
+class ALIRTracerPluginBase:
     """
-    Base class for DAIS tracer plugins.
+    Base class for ALIR tracer plugins.
 
     Methods to be implemented by subclasses:
     - `apply_model`

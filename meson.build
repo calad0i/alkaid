@@ -22,11 +22,11 @@ xtensor_dep = dependency('xtensor', default_options: ['use_xsimd=true', 'use_tbb
 
 _limited_abi = ''
 
-dais_bin = py.extension_module(
-  'dais_bin',
+alir_bin = py.extension_module(
+  'alir_bin',
   sources: [
-    'src/alkaid/_binary/dais/bindings.cc',
-    'src/alkaid/_binary/dais/DAISInterpreter.cc',
+    'src/alkaid/_binary/alir/bindings.cc',
+    'src/alkaid/_binary/alir/ALIRInterpreter.cc',
   ],
   dependencies: [nanobind_dep, omp_dep],
   install: true,
@@ -43,8 +43,8 @@ cmvm_bin = py.extension_module(
     'src/alkaid/_binary/cmvm/indexers.cc',
     'src/alkaid/_binary/cmvm/mat_decompose.cc',
     'src/alkaid/_binary/cmvm/state_opr.cc',
-    'src/alkaid/_binary/dais/bindings.cc',
-    'src/alkaid/_binary/dais/DAISInterpreter.cc',
+    'src/alkaid/_binary/alir/bindings.cc',
+    'src/alkaid/_binary/alir/ALIRInterpreter.cc',
   ],
   dependencies: [nanobind_dep, xtensor_dep, omp_dep],
   install: true,
@@ -81,9 +81,9 @@ install_subdir('src/alkaid/codegen/hls/source/ap_types/include',
 stubgen = nanobind_dep.get_variable('stubgen')
 
 custom_target(
-  output: 'dais_bin.pyi',
-  depends: dais_bin,
-  command: [py, stubgen, '-m', 'dais_bin', '-M', 'py.typed'],
+  output: 'alir_bin.pyi',
+  depends: alir_bin,
+  command: [py, stubgen, '-m', 'alir_bin', '-M', 'py.typed'],
   install: true,
   install_dir: py.get_install_dir() / 'alkaid' / '_binary',
 )

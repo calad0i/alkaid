@@ -43,20 +43,20 @@ rtl_model.write()
 # rtl_model.predict(data_inp) # run inference with the compiled model; bit-accurate
 
 # Run bit-exact (all int64 arithmetic) inference with the combinational logic model
-# Backed by C++-based DAIS interpreter for speed
+# Backed by C++-based ALIR interpreter for speed
 # comb.predict(data_inp)
 ```
 
 ## Using external plugins:
 
-alkaid supports a plugin system for external frameworks. A plugin can implement the logic for tracing models defined in a specific framework (e.g., Keras3/HGQ2, PyTorch, etc.) and register itself under the `dais_tracer.plugins` entry point. When tracing a model, alkaid will automatically discover the appropriate plugin based on the model type and use it for tracing. See [Conversion Plugin](plugin.md) for more details. Below are some examples.
+alkaid supports a plugin system for external frameworks. A plugin can implement the logic for tracing models defined in a specific framework (e.g., Keras3/HGQ2, PyTorch, etc.) and register itself under the `alir_tracer.plugins` entry point. When tracing a model, alkaid will automatically discover the appropriate plugin based on the model type and use it for tracing. See [Conversion Plugin](plugin.md) for more details. Below are some examples.
 
 
 ## HGQ2/Keras3 integration:
 
 For models defined in [HGQ2](https://github.com/calad0i/HGQ2) (Keras3 based), alkaid can trace the model operations automatically when the supported layers/operations are used (i.e., most HGQ2 layers without general non-linear activations). In this way, one can easily convert existing HGQ2 models to HDL or HLS code in seconds. The plugin is built-in in HGQ2, so installing HGQ2 is sufficient to enable the integration. No additional configuration is needed.
 
-> **Note**: HGQ2 support requires installing the [HGQ2](https://github.com/calad0i/HGQ2) package separately. HGQ2 registers its own `dais_tracer.plugins` entry point under the `keras` key, which alkaid discovers automatically. `trace_model()` auto-detects the framework from `type(model).__module__.split('.', 1)[0]`, so a Keras model resolves to `'keras'` and the HGQ2 plugin is used. See [Conversion Plugin](plugin.md) for how the plugin system works.
+> **Note**: HGQ2 support requires installing the [HGQ2](https://github.com/calad0i/HGQ2) package separately. HGQ2 registers its own `alir_tracer.plugins` entry point under the `keras` key, which alkaid discovers automatically. `trace_model()` auto-detects the framework from `type(model).__module__.split('.', 1)[0]`, so a Keras model resolves to `'keras'` and the HGQ2 plugin is used. See [Conversion Plugin](plugin.md) for how the plugin system works.
 
 ```python
 # alkaid with HGQ2
@@ -131,7 +131,7 @@ For generating Verilog through [XLS](https://google.github.io/xls/), an experime
 ```python
 from alkaid.codegen.xls import XLSModel
 
-xls_model = XLSModel(comb) # Converts DAIS to XLS IR.
+xls_model = XLSModel(comb) # Converts ALIR to XLS IR.
 _ = xls_model.jit() # JIT-compile the XLS IR
 y = xls_model.predict(data_inp) # Batched inference; bit-exact. No multithreading support for now.
 verilog_text = xls_model.compile('/tmp/xls_output.v')
@@ -145,7 +145,7 @@ alkaid provides a command-line interface for common workflows:
 # Convert a Keras/HGQ2 model to an RTL project
 alkaid convert model.keras /tmp/rtl_output --flavor verilog --latency-cutoff 5
 
-# Convert a serialized DAIS model (JSON) to an RTL project
+# Convert a serialized ALIR model (JSON) to an RTL project
 alkaid convert model.json /tmp/rtl_output --flavor vhdl
 
 # Generate a resource/timing report from an existing RTL project

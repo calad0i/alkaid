@@ -1,16 +1,16 @@
-DA Instruction Set (DAIS)
+Alkaid Low-Level Intermediate Representation (ALIR)
 =============================================
 
-In alkaid, all operations are converted to a RISC-like, instruction set level intermediate representation, distributed arithmetic instruction set (DAIS, pounces as "dice"). DAIS is designed to be minimal and lightweight, while being extensible and satisfying the requirements for representing neural networks required in the framework. Specifically, each DAIS program is in SSA form and contains one block of logic that are fully parallelizable (i.e., all combinational), and resource multiplexing shall be performed on a higher level.
+In alkaid, all operations are converted to a RISC-like, instruction set level intermediate representation, Alkaid Low-level Intermediate Representation (ALIR). ALIR is designed to be minimal and lightweight, while being extensible and satisfying the requirements for representing neural networks required in the framework. Specifically, each ALIR program is in SSA form and contains one block of logic that are fully parallelizable (i.e., all combinational), and resource multiplexing shall be performed on a higher level.
 
-One program represented in DAIS consists of the following components:
+One program represented in ALIR consists of the following components:
 
 ## Program Structure
 
 - `spec version`: int
-    - The spec version of the DAIS program. Currently, the version is `2`.
+    - The spec version of the ALIR program. Currently, the version is `2`.
 - `firmware version`: int
-    - Reserved for downstream firmware versioning. The DAIS interpreter **must** ignore this field.
+    - Reserved for downstream firmware versioning. The ALIR interpreter **must** ignore this field.
 - `shape`: tuple<int, int>
     - The number of inputs and outputs of the program.
 - `inp_shifts`: vector<int>
@@ -110,4 +110,4 @@ Each table is in the order of increasing index on the order of the smallest to l
 
 In execution, the internal buffer **must** have larger bitwidth than the maximum bitwidth appears in any of the operations. When an operation implies quantization, the program **must** apply the quantization explicitly. When an operation does not imply quantization, the program **may** apply quantization and verify no value change is incurred as a result.
 
-`_binary/dais/DAISInterpreter.cc` and `_binary/dais/DAISInterpreter.hh` contains a reference implementation of a DAIS interpreter in C++, which runs the program in a straightforward manner with `int64_t` for the internal buffer. The program is represented in a `int32_t` array, which can be obtained by `comb_logic.to_binary()` or `comb_logic.save_binary(path)`.
+`_binary/alir/ALIRInterpreter.cc` and `_binary/alir/ALIRInterpreter.hh` contains a reference implementation of a ALIR interpreter in C++, which runs the program in a straightforward manner with `int64_t` for the internal buffer. The program is represented in a `int32_t` array, which can be obtained by `comb_logic.to_binary()` or `comb_logic.save_binary(path)`.

@@ -2,12 +2,12 @@ import numpy as np
 
 from ..trace import FVArray
 from ..trace.ops import quantize, relu
-from .plugin import DAISTracerPluginBase
+from .plugin import ALIRTracerPluginBase
 
 
 def operation(inp):
     """An example operation to be traced. One can use numpy-based operations along
-    with DAIS traceable operations provided in `alkaid.trace.ops`.
+    with ALIR traceable operations provided in `alkaid.trace.ops`.
     """
     w = np.arange(-60, 60).reshape(4, 5, 6).astype(np.float32) / 2**7
     inp = quantize(inp, 1, 7, 0)  # Input must be quantized before any non-trivial operation
@@ -25,7 +25,7 @@ def operation(inp):
 
 
 class ExampleModel:
-    """A simple example model class for showcasing DAIS tracer plugin usage."""
+    """A simple example model class for showcasing ALIR tracer plugin usage."""
 
     def __init__(self, input_shape: tuple[int, ...] | None = None):
         self.input_shape = input_shape
@@ -34,12 +34,12 @@ class ExampleModel:
         return operation(x)
 
 
-class ExampleDAISTracer(DAISTracerPluginBase):
-    """An example DAIS tracer plugin for the ExampleModel. Two methods must be implemented:
+class ExampleALIRTracer(ALIRTracerPluginBase):
+    """An example ALIR tracer plugin for the ExampleModel. Two methods must be implemented:
     - `get_input_shapes`
     - `apply_model`
 
-    This plugin must be registered as an entry point under the group `dais_tracer.plugins`.
+    This plugin must be registered as an entry point under the group `alir_tracer.plugins`.
     The entry name should be the module name where the model class is defined. In this case,
     since the target model class `ExampleModel` is defined in `alkaid.converter.example_plugin`, the entry point
     should be registered under the name `alkaid`. See `pyproject.toml` for an example.

@@ -52,7 +52,7 @@ optional-dependencies.tests = [
 ]
 urls.repository = "https://github.com/calad0i/alkaid"
 scripts.alkaid = "alkaid._cli:main"
-entry-points."dais_tracer.plugins".alkaid = "alkaid.converter.example:ExampleDAISTracer"
+entry-points."alir_tracer.plugins".alkaid = "alkaid.converter.example:ExampleALIRTracer"
 
 [tool.meson-python]
 limited-api = false
@@ -64,7 +64,10 @@ line-length = 130
 indent-width = 4
 
 include = [ "src/**/*.py" ]
-exclude = [ "src/alkaid/codegen/hls/source/ac_types", "src/alkaid/codegen/hls/source/ap_types" ]
+exclude = [
+  "src/alkaid/codegen/hls/source/ac_types",
+  "src/alkaid/codegen/hls/source/ap_types",
+]
 
 format.indent-style = "space"
 format.quote-style = "single"

@@ -349,7 +349,7 @@ def _sol_io_params(sol: CombLogic):
     return kifs, widths, inp_kifs, inp_widths, inp_starts, total_inp_bits, out_kifs, out_widths, total_out_bits
 
 
-def build_xls_function(sol: CombLogic, fn_name: str = 'dais_fn') -> tuple[Package, Function]:
+def build_xls_function(sol: CombLogic, fn_name: str = 'alir_fn') -> tuple[Package, Function]:
     kifs, widths, inp_kifs, inp_widths, inp_starts, total_inp_bits, out_kifs, out_widths, total_out_bits = _sol_io_params(sol)
 
     if total_inp_bits == 0 or total_out_bits == 0:
@@ -386,7 +386,7 @@ def build_xls_function(sol: CombLogic, fn_name: str = 'dais_fn') -> tuple[Packag
     return pkg_opt, fn_opt
 
 
-def build_xls_io_wrapper(sol: CombLogic, fn_name: str = 'dais_fn') -> tuple[Package, Function]:
+def build_xls_io_wrapper(sol: CombLogic, fn_name: str = 'alir_fn') -> tuple[Package, Function]:
     """Build an XLS function with unpacked array I/O.
 
     Input:  bits[max_inp_bw][N_inp]  — array of uniform-width input elements

@@ -8,7 +8,7 @@ It is advised to always verify the results produced from the generated code.
 
 ## Supported Operations
 
-Most common high-level operations can be represented in [DAIS](dais.md) is supported, including but not limited to:
+Most common high-level operations can be represented in [ALIR](alir.md) is supported, including but not limited to:
  - Dense/Convolutional/EinsumDense layers
  - ReLU
  - max/minimum of two tensors; max/min pooling

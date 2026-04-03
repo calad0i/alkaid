@@ -48,7 +48,7 @@ Index
    status.md
    install.md
    getting_started.md
-   dais.md
+   alir.md
    cmvm.md
    plugin.md
    faq.md

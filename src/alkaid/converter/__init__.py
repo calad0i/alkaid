@@ -3,11 +3,11 @@ from typing import Any, Literal, overload
 
 from ..cmvm import solver_options_t
 from ..trace import FVArray, HWConfig
-from .plugin import DAISTracerPluginBase
+from .plugin import ALIRTracerPluginBase
 
 __all__ = ['trace_model']
 
-ENTRY_POINT_GROUP = 'dais_tracer.plugins'
+ENTRY_POINT_GROUP = 'alir_tracer.plugins'
 
 
 def get_available_plugins() -> dict[str, EntryPoint]:
@@ -66,9 +66,9 @@ def trace_model(  # type: ignore
     entry = plugins[framework]
 
     if verbose:
-        print(f'Loading DAIS tracer plugin from {entry.module}:{entry.attr}.')
+        print(f'Loading ALIR tracer plugin from {entry.module}:{entry.attr}.')
 
-    _class: type[DAISTracerPluginBase] = entry.load()
+    _class: type[ALIRTracerPluginBase] = entry.load()
     tracer = _class(model, hwconf, solver_options, **kwargs)
     return tracer.trace(
         verbose=verbose,

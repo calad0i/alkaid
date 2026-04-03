@@ -47,7 +47,7 @@ def to_alkaid(
     elif model_path.suffix == '.json':
         with open(model_path) as f:
             data = json.load(f)
-        if data.get('meta', None) != 'DAISModel':
+        if data.get('meta', None) != 'ALIRModel':
             raise ValueError('Unknown model type in JSON file.')
         comb = CombLogic.deserialize(data)
         if opt:
@@ -120,7 +120,7 @@ def to_alkaid(
         else:
             max_diff = max_rel_diff = mean_diff = mean_rel_diff = 0.0
             if verbose:
-                print(f'[INFO] DAIS simulation passed: [0/{total}] mismatches.')
+                print(f'[INFO] ALIR simulation passed: [0/{total}] mismatches.')
         with open(path / 'mismatches.json', 'w') as f:
             json.dump(
                 {
@@ -220,7 +220,7 @@ def _add_convert_args(parser: argparse.ArgumentParser):
         action='store_true',
         help='Validate RTL by Verilator (and GHDL). If target is HLS, cc compilation with headers will be done instead.',
     )
-    parser.add_argument('--n-threads', '-j', type=int, default=4, help='Number of threads for compilation and DAIS simulation')
+    parser.add_argument('--n-threads', '-j', type=int, default=4, help='Number of threads for compilation and ALIR simulation')
     parser.add_argument('--metadata', '-meta', type=str, default=None, help='Path to metadata JSON file to be included')
     parser.add_argument(
         '--hw-config',

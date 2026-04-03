@@ -1,7 +1,7 @@
 #include <cmath>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
-#include "DAISInterpreter.hh"
+#include "ALIRInterpreter.hh"
 #include <cstring>
 #include <span>
 #include <omp.h>
@@ -19,7 +19,7 @@ void _run_interp(
 ) {
     int32_t n_in = binary_data[2];
     int32_t n_out = binary_data[3];
-    dais::DAISInterpreter interp;
+    alir::ALIRInterpreter interp;
     interp.load_from_binary(binary_data);
 
     for (size_t i = 0; i < n_samples; ++i) {
@@ -46,10 +46,10 @@ void run_interp(
     // =============== version check and init ===============
 
     int32_t spec_version = bin_logic_ptr[0];
-    if (spec_version != dais::DAISInterpreter::dais_version) {
+    if (spec_version != alir::ALIRInterpreter::alir_version) {
         throw std::runtime_error(
-            "DAIS version mismatch: expected version " +
-            std::to_string(dais::DAISInterpreter::dais_version) + ", got version " +
+            "ALIR version mismatch: expected version " +
+            std::to_string(alir::ALIRInterpreter::alir_version) + ", got version " +
             std::to_string(spec_version)
         );
     }
@@ -144,7 +144,7 @@ nb::ndarray<nb::numpy, double_t> run_interp_numpy(
     );
 }
 
-NB_MODULE(dais_bin, m) {
+NB_MODULE(alir_bin, m) {
     m.def(
         "run_interp",
         &run_interp_numpy,

@@ -109,7 +109,7 @@ class RTLModel:
         Parameters
         ----------
         solution : CombLogic | Pipeline
-            The logic object represented in DAIS to be converted to RTL.
+            The logic object represented in ALIR to be converted to RTL.
         path : str | Path
             The path to save the generated RTL project. The directory will be created if it does not exist.
         prj_name : str | None, optional

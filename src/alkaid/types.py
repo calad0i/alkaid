@@ -10,9 +10,9 @@ import numpy as np
 from numpy import float32, int8
 from numpy.typing import NDArray
 
-from ._binary import dais_interp_run, iceil_log2
+from ._binary import alir_interp_run, iceil_log2
 
-DAIS_SPEC_VERSION = 2
+ALIR_SPEC_VERSION = 2
 
 
 if TYPE_CHECKING:
@@ -459,18 +459,18 @@ class CombLogic(NamedTuple):
 
     def save(self, path: str | Path):
         """Save the solution to a file."""
-        dump = {'model': self, 'meta': 'DAISModel', 'spec_version': DAIS_SPEC_VERSION}
+        dump = {'model': self, 'meta': 'ALIRModel', 'spec_version': ALIR_SPEC_VERSION}
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, 'w') as f:
             json.dump(dump, f, cls=JSONEncoder, separators=(',', ':'))
 
     @classmethod
     def deserialize(cls, dump: dict):
-        """Load DAIS from a serialized dictionary."""
+        """Load ALIR from a serialized dictionary."""
 
-        assert dump['meta'] == 'DAISModel', f'Unknown model type {dump["meta"]}'
-        assert dump['spec_version'] == DAIS_SPEC_VERSION, (
-            f'Unsupported spec version {dump["spec_version"]}: expected {DAIS_SPEC_VERSION}'
+        assert dump['meta'] == 'ALIRModel', f'Unknown model type {dump["meta"]}'
+        assert dump['spec_version'] == ALIR_SPEC_VERSION, (
+            f'Unsupported spec version {dump["spec_version"]}: expected {ALIR_SPEC_VERSION}'
         )
         data = dump['model']
 
@@ -531,7 +531,7 @@ class CombLogic(NamedTuple):
 
         header = np.concatenate(
             [
-                [DAIS_SPEC_VERSION, version, n_in, n_out, len(self.ops), n_tables],
+                [ALIR_SPEC_VERSION, version, n_in, n_out, len(self.ops), n_tables],
                 self.inp_shifts,
                 self.out_idxs,
                 self.out_shifts,
@@ -573,7 +573,7 @@ class CombLogic(NamedTuple):
             data.tofile(f)
 
     def predict(self, data: NDArray | Sequence[NDArray], n_threads: int = 0, debug=False, dump=False) -> NDArray[np.float64]:
-        """Predict the output of the solution for a batch of input data with cpp backed DAIS interpreter.
+        """Predict the output of the solution for a batch of input data with cpp backed ALIR interpreter.
         Cannot be used if the binary interpreter is not installed.
 
         Parameters
@@ -602,7 +602,7 @@ class CombLogic(NamedTuple):
             n_threads = int(os.environ.get('DA_DEFAULT_THREADS', 0))
 
         bin_logic = self.to_binary()
-        return dais_interp_run(bin_logic, data, n_threads, debug=debug, dump=dump)
+        return alir_interp_run(bin_logic, data, n_threads, debug=debug, dump=dump)
 
 
 class Pipeline(NamedTuple):

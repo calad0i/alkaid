@@ -7,7 +7,7 @@
 #include <span>
 #include <omp.h>
 
-namespace dais {
+namespace alir {
 
     struct DType {
         int32_t is_signed;
@@ -52,7 +52,7 @@ namespace dais {
         DType dtype; // (signed, integer_bits, fractional_bits)
     };
 
-    class DAISInterpreter {
+    class ALIRInterpreter {
       private:
         size_t n_in, n_out, n_ops, n_tables;
         int32_t max_ops_width = 0, max_inp_width = 0, max_out_width = 0;
@@ -116,7 +116,7 @@ namespace dais {
         int64_t bit_binary(int64_t v1, int64_t v2, const Op &op) const;
 
       public:
-        static const int dais_version = 2;
+        static const int alir_version = 2;
 
         void load_from_file(const std::string &filename);
 
@@ -137,4 +137,4 @@ namespace dais {
         void print_program_info() const;
     };
 
-} // namespace dais
+} // namespace alir
