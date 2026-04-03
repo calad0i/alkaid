@@ -10,7 +10,7 @@ The most flexible way to use alkaid is through its functional API/Explicit symbo
 # alkaid standalone example
 import numpy as np
 
-from alkaid.trace import FVArrayInput, comb_trace
+from alkaid.trace import FVArrayInput, trace
 from alkaid.trace.ops import einsum, quantize, relu
 from alkaid.codegen import HLSModel, RTLModel
 
@@ -36,15 +36,15 @@ out = operation(inp)
 
 # Generate pipelined Verilog code form the traced operation
 # flavor can be 'verilog' or 'vhdl'. VHDL code generated will be in 2008 standard.
-comb_logic = comb_trace(inp, out)
-rtl_model = RTLModel(comb_logic, '/tmp/rtl', flavor='verilog', latency_cutoff=5)
+comb = trace(inp, out)
+rtl_model = RTLModel(comb, '/tmp/rtl', flavor='verilog', latency_cutoff=5)
 rtl_model.write()
 # rtl_model.compile() # compile the generated Verilog code with verilator (with GHDL, if using vhdl)
 # rtl_model.predict(data_inp) # run inference with the compiled model; bit-accurate
 
 # Run bit-exact (all int64 arithmetic) inference with the combinational logic model
 # Backed by C++-based DAIS interpreter for speed
-# comb_logic.predict(data_inp)
+# comb.predict(data_inp)
 ```
 
 ## Using external plugins:
@@ -65,7 +65,7 @@ import keras
 from hgq.layers import QEinsumDenseBatchnorm, QMaxPool1D
 from alkaid.codegen import HLSModel, RTLModel
 from alkaid.converter import trace_model
-from alkaid.trace import comb_trace
+from alkaid.trace import trace
 
 inp = keras.Input((4, 5))
 out = QEinsumDenseBatchnorm('bij,jk->bik', (4,6), bias_axes='k', activation='relu')(inp)
@@ -78,7 +78,7 @@ model = keras.Model(inp, out)
 # Automatically replay the model operation on symbolic tensors
 inp, out = trace_model(model)
 
-comb_logic = comb_trace(inp, out)
+comb = trace(inp, out)
 
 ... # The rest is the same as above
 ```
@@ -94,7 +94,7 @@ from alkaid.codegen import RTLModel
 
 # flavor='verilog' uses Verilator for simulation;
 # 'vhdl' uses GHDL and Verilator chained (GHDL for VHDL to Verilog conversion, then Verilator for simulation)
-rtl_model = RTLModel(comb_logic, '/tmp/rtl', flavor='verilog', latency_cutoff=5, clock_period=5.0)
+rtl_model = RTLModel(comb, '/tmp/rtl', flavor='verilog', latency_cutoff=5, clock_period=5.0)
 rtl_model.write()        # write RTL project to disk
 rtl_model.compile()      # compile simulation emulator (requires Verilator or GHDL)
 y = rtl_model.predict(x) # bit-accurate inference via compiled emulator
@@ -110,7 +110,7 @@ The generated project includes TCL build scripts for Vivado (`build_vivado_prj.t
 from alkaid.codegen import HLSModel
 
 # flavor='vitis' (ap_types), 'hlslib' (ac_types/Intel), or 'oneapi'
-hls_model = HLSModel(comb_logic, '/tmp/hls', flavor='vitis', clock_period=5.0)
+hls_model = HLSModel(comb, '/tmp/hls', flavor='vitis', clock_period=5.0)
 hls_model.write()        # write HLS project to disk
 hls_model.compile()      # compile C++ emulator
 y = hls_model.predict(x) # inference via compiled emulator
@@ -131,7 +131,7 @@ For generating Verilog through [XLS](https://google.github.io/xls/), an experime
 ```python
 from alkaid.codegen.xls import XLSModel
 
-xls_model = XLSModel(comb_logic) # Converts DAIS to XLS IR.
+xls_model = XLSModel(comb) # Converts DAIS to XLS IR.
 _ = xls_model.jit() # JIT-compile the XLS IR
 y = xls_model.predict(data_inp) # Batched inference; bit-exact. No multithreading support for now.
 verilog_text = xls_model.compile('/tmp/xls_output.v')

@@ -37,13 +37,6 @@ Installation
 
 Note: alkaid is now released as binary wheels on PyPI for Linux X86_64 and MacOS ARM64 platforms. For other platforms, please install from source. C++20 compliant compiler with OpenMP support is required to build alkaid from source. Windows is not officially supported, but you may try building it with MSVC or MinGW.
 
-Getting Started
----------------
-
-- See the `Getting Started <https://calad0i.github.io/alkaid/getting_started.html>`_ guide for a quick introduction to using alkaid.
-- See `JEDI-linear <https://github.com/calad0i/JEDI-linear>`_ project which is based on alkaid
-
-
 
 Index
 =================
@@ -72,23 +65,3 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-
-Citation
-==================
-
-If you use alkaid in a publication, please cite our `TRETS'25 paper <https://doi.org/10.1145/3777387>`__ with the following bibtex entry:
-
-.. code-block:: bibtex
-
-   @article{sun2025alkaid,
-      author = {Sun, Chang and Que, Zhiqiang and Loncar, Vladimir and Luk, Wayne and Spiropulu, Maria},
-      title = {alkaid: Distributed Arithmetic for Real-time Neural Networks on FPGAs},
-      year = {2025},
-      publisher = {Association for Computing Machinery},
-      address = {New York, NY, USA},
-      issn = {1936-7406},
-      url = {https://doi.org/10.1145/3777387},
-      doi = {10.1145/3777387},
-      journal = {ACM Trans. Reconfigurable Technol. Syst.},
-      month = nov,
-   }
