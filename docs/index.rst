@@ -31,9 +31,9 @@ With DA in its name, alkaid do perform distributed arithmetic (DA) optimization 
 Installation
 ------------
 
-.. code-block:: bash
+.. .. code-block:: bash
 
-   pip install alkaid
+..    pip install alkaid
 
 Note: alkaid is now released as binary wheels on PyPI for Linux X86_64 and MacOS ARM64 platforms. For other platforms, please install from source. C++20 compliant compiler with OpenMP support is required to build alkaid from source. Windows is not officially supported, but you may try building it with MSVC or MinGW.
 
