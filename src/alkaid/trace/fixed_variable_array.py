@@ -599,7 +599,7 @@ def _np_histogram(a, bins=10, range=None, density=None, weights=None):
 @_array_fn(np.sort)
 def _np_sort(a, axis=-1, kind=None, order=None):
     assert order is None, 'Sorting with order is not supported for FVArray'
-    return sort(a, axis=axis, kind=kind)  # type: ignore
+    return sort(a, axis=axis, kind=kind or 'batcher')  # type: ignore
 
 
 @_array_fn(np.argsort)
