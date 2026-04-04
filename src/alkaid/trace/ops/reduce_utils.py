@@ -70,7 +70,7 @@ def _reduce(operator: Callable[[T, T], T], arr: Sequence[T]) -> T:
 
 def reduce(operator: Callable[[T, T], T], x: TA, axis: int | Sequence[int] | None = None, keepdims: bool = False) -> TA:
     """
-    Reduce the array by summing over the specified axis.
+    Reduce the array by the operator over the specified axis.
     """
     from ..fixed_variable_array import FVArray
 
