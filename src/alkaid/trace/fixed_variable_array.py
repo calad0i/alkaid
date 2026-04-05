@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from .._binary import get_lsb_loc
 from ..cmvm import solve, solver_options_t
 from .fixed_variable import FVariable, FVariableInput, HWConfig, LookupTable, QInterval
-from .ops import _quantize, argreduce, einsum, histogram, reduce, sort
+from .ops import _quantize, argreduce, einsum, histogram, reduce, searchsorted, sort
 
 T = TypeVar('T')
 
@@ -338,6 +338,19 @@ class FVArray(np.ndarray):
         def reshape(self, shape, /, *, order='C', copy=None) -> 'FVArray': ...  # type: ignore
         def transpose(self, *axes) -> 'FVArray': ...
 
+    @classmethod
+    def new(
+        cls,
+        shape: tuple[int, ...] | int,
+        hwconf: HWConfig | tuple[int, int, int] = HWConfig(1, 1, -1),
+        solver_options: solver_options_t | None = None,
+        latency=0.0,
+    ) -> 'FVArray':
+        _arr = np.empty(shape, dtype=object)
+        for i in range(_arr.size):
+            _arr.ravel()[i] = FVariableInput(latency, hwconf)
+        return cls.__new__(cls, _arr, solver_options, hwconf=hwconf)
+
 
 class FVArrayInput(FVArray):
     """Similar to FVArray, but initializes all elements as FVariableInput - the precisions are unspecified when initialized, and the highest precision requested (i.e., quantized to) will be recorded for generation of the logic."""
@@ -603,6 +616,11 @@ def _np_where(condition, x=None, y=None):
         fva.solver_options,
         hwconf=fva.hwconf,
     )
+
+
+@_array_fn(np.searchsorted)
+def _np_searchsorted(a, v, side='left', sorter=None):
+    return searchsorted(a, v, side=side, sorter=sorter)
 
 
 @_array_fn(np.histogram)

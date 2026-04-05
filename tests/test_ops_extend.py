@@ -208,3 +208,58 @@ def test_empty_histogram():
     counts, edges = np.histogram(fva, bins=3, range=(0.0, 3.0))
     assert counts.shape == (3,)
     assert all(float(c.low) == 0.0 for c in np.asarray(counts).ravel())
+
+
+class TestSearchsorted(OperationTest):
+    """Searchsorted with parametrized sorter, edge type, and side."""
+
+    @pytest.fixture(params=['thermometer', 'bsearch'])
+    def sorter(self, request):
+        return request.param
+
+    @pytest.fixture(params=['const-fva', 'fva-fva', 'fva-const'])
+    def _type(self, request):
+        return request.param
+
+    @pytest.fixture(params=['left', 'right'])
+    def side(self, request):
+        return request.param
+
+    @pytest.fixture()
+    def inp(self, _type) -> FVArray:
+        n = 16
+        b = np.random.randint(0, 9, size=n)
+        i = np.random.randint(-8, 8, size=n)
+        k = np.random.randint(0, 2, size=n)
+        return FVArray.from_kif(k, i, b - i)
+
+    @pytest.fixture()
+    def op_func(self, sorter, _type, side, w8x8):
+        if _type == 'const-fva':
+            edges = np.sort(w8x8.ravel())
+
+            def fn(x):  # type: ignore
+                if isinstance(x, FVArray):
+                    return np.searchsorted(edges, x, side=side, sorter=sorter)
+                return np.array([np.searchsorted(edges, v, side=side) for v in x])
+
+        elif _type == 'fva-fva':
+            # FVA edges: first 8 elements are edges, last 8 are values
+            def fn(x):
+                a, v = np.sort(x[..., :8], axis=-1), x[..., 8:]
+                if isinstance(x, FVArray):
+                    return np.searchsorted(a, v, side=side, sorter=sorter)
+                sx = np.sort(x[:, :8], axis=-1)
+                return np.stack([np.searchsorted(_sx, _x, side=side) for _sx, _x in zip(sx, x[:, 8:])])
+        else:
+            assert _type == 'fva-const'
+            v = w8x8.ravel()
+
+            def fn(x):
+                a = np.sort(x, axis=-1)
+                if isinstance(x, FVArray):
+                    return np.searchsorted(a, v, side=side, sorter=sorter)
+                sx = np.sort(x, axis=-1)
+                return np.stack([np.searchsorted(_sx, v, side=side) for _sx in sx])
+
+        return fn
