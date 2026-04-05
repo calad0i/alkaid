@@ -43,6 +43,7 @@ architecture rtl of shift_adder is
     constant IN1_NEED_BITS : integer := if_then_else(SHIFT1 > 0, BW_INPUT1 + SHIFT1, BW_INPUT1);
     constant EXTRA_PAD     : integer := if_then_else(SIGNED0 /= SIGNED1, IS_SUB + 1, IS_SUB);
     constant BW_ADD        : integer := max(IN0_NEED_BITS, IN1_NEED_BITS) + EXTRA_PAD + 1;
+    constant ABS_SHIFT     : integer := if_then_else(SHIFT1 > 0, SHIFT1, if_then_else(SHIFT1 < 0, -SHIFT1, 0));
 
     signal in0_ext : std_logic_vector(BW_ADD-1 downto 0);
     signal in1_ext : std_logic_vector(BW_ADD-1 downto 0);
@@ -88,13 +89,77 @@ begin
         end generate;
     end generate;
 
-    -- Addition/subtraction logic
-    gen_sub: if IS_SUB = 1 generate
-        accum <= std_logic_vector(signed(in0_ext) - signed(in1_ext));
+    gen_no_shift: if SHIFT1 = 0 generate
+        gen_sub: if IS_SUB = 1 generate
+            accum <= std_logic_vector(signed(in0_ext) - signed(in1_ext));
+        end generate;
+        gen_add: if IS_SUB = 0 generate
+            accum <= std_logic_vector(signed(in0_ext) + signed(in1_ext));
+        end generate;
     end generate;
 
-    gen_add: if IS_SUB = 0 generate
-        accum <= std_logic_vector(signed(in0_ext) + signed(in1_ext));
+    gen_shift_pos: if SHIFT1 > 0 generate
+        -- copy lower SHIFT1 bits
+        accum(ABS_SHIFT-1 downto 0) <= in0_ext(ABS_SHIFT-1 downto 0);
+
+        -- upper bits
+        gen_disjoint: if ABS_SHIFT >= BW_INPUT0 and SIGNED0 = 0 generate
+            -- in0 unsigned, disjoint
+            gen_add: if IS_SUB = 0 generate
+                accum(BW_ADD-1 downto ABS_SHIFT) <= in1_ext(BW_ADD-1 downto ABS_SHIFT);
+            end generate;
+            gen_sub: if IS_SUB = 1 generate
+                accum(BW_ADD-1 downto ABS_SHIFT) <= std_logic_vector(-signed(in1_ext(BW_ADD-1 downto ABS_SHIFT)));
+            end generate;
+        end generate;
+        gen_with_add: if ABS_SHIFT < BW_INPUT0 or SIGNED0 = 1 generate
+            -- in0 signed or has overlap
+            gen_sub: if IS_SUB = 1 generate
+                accum(BW_ADD-1 downto ABS_SHIFT) <= std_logic_vector(
+                    signed(in0_ext(BW_ADD-1 downto ABS_SHIFT)) - signed(in1_ext(BW_ADD-1 downto ABS_SHIFT)));
+            end generate;
+            gen_add: if IS_SUB = 0 generate
+                accum(BW_ADD-1 downto ABS_SHIFT) <= std_logic_vector(
+                    signed(in0_ext(BW_ADD-1 downto ABS_SHIFT)) + signed(in1_ext(BW_ADD-1 downto ABS_SHIFT)));
+            end generate;
+        end generate;
+    end generate;
+
+    gen_shift_neg: if SHIFT1 < 0 generate
+        -- copy lower |SHIFT1| bits
+        gen_lower_add: if IS_SUB = 0 generate
+            accum(ABS_SHIFT-1 downto 0) <= in1_ext(ABS_SHIFT-1 downto 0);
+        end generate;
+        gen_lower_sub: if IS_SUB = 1 generate
+            accum(ABS_SHIFT-1 downto 0) <= std_logic_vector(-signed(in1_ext(ABS_SHIFT-1 downto 0)));
+        end generate;
+
+        -- upper bits
+        gen_disjoint: if ABS_SHIFT >= BW_INPUT1 and SIGNED1 = 0 generate
+            -- in1 unsigned, disjoint
+            gen_add: if IS_SUB = 0 generate
+                accum(BW_ADD-1 downto ABS_SHIFT) <= in0_ext(BW_ADD-1 downto ABS_SHIFT);
+            end generate;
+            gen_sub: if IS_SUB = 1 generate
+                accum(BW_ADD-1 downto ABS_SHIFT) <=
+                    std_logic_vector(signed(in0_ext(BW_ADD-1 downto ABS_SHIFT)) - 1)
+                    when unsigned(in1_ext(ABS_SHIFT-1 downto 0)) /= 0
+                    else in0_ext(BW_ADD-1 downto ABS_SHIFT);
+            end generate;
+        end generate;
+        gen_with_add: if ABS_SHIFT < BW_INPUT1 or SIGNED1 = 1 generate
+            -- in1 signed or has overlap
+            gen_add: if IS_SUB = 0 generate
+                accum(BW_ADD-1 downto ABS_SHIFT) <= std_logic_vector(
+                    signed(in0_ext(BW_ADD-1 downto ABS_SHIFT)) + signed(in1_ext(BW_ADD-1 downto ABS_SHIFT)));
+            end generate;
+            gen_sub: if IS_SUB = 1 generate
+                accum(BW_ADD-1 downto ABS_SHIFT) <=
+                    std_logic_vector(signed(in0_ext(BW_ADD-1 downto ABS_SHIFT)) - signed(in1_ext(BW_ADD-1 downto ABS_SHIFT)) - 1)
+                    when unsigned(in1_ext(ABS_SHIFT-1 downto 0)) /= 0
+                    else std_logic_vector(signed(in0_ext(BW_ADD-1 downto ABS_SHIFT)) - signed(in1_ext(BW_ADD-1 downto ABS_SHIFT)));
+            end generate;
+        end generate;
     end generate;
 
     result <= accum(BW_OUT-1+DROP_LSBS downto DROP_LSBS);

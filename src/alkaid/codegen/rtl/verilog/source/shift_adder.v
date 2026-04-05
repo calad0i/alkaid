@@ -25,10 +25,11 @@ module shift_adder #(
   localparam IN1_PAD_LEFT = (SHIFT1 > 0) ? BW_ADD - BW_INPUT1 - SHIFT1 : BW_ADD - BW_INPUT1;
   localparam IN1_PAD_RIGHT = (SHIFT1 > 0) ? SHIFT1 : 0;
 
-  wire [BW_ADD-1:0] in0_ext;
-  wire [BW_ADD-1:0] in1_ext;
+  localparam ABS_SHIFT = (SHIFT1 > 0) ? SHIFT1 : (SHIFT1 < 0) ? -SHIFT1 : 0;
 
   // verilator lint_off UNUSEDSIGNAL
+  wire [BW_ADD-1:0] in0_ext;
+  wire [BW_ADD-1:0] in1_ext;
   wire [BW_ADD-1:0] accum;
   // verilator lint_on UNUSEDSIGNAL
 
@@ -49,10 +50,56 @@ module shift_adder #(
   endgenerate
 
   generate
-    if (IS_SUB == 1) begin : is_sub
-      assign accum = in0_ext - in1_ext;
-    end else begin : is_add
-      assign accum = in0_ext + in1_ext;
+    if (SHIFT1 == 0) begin : no_shift
+      if (IS_SUB == 1) begin : is_sub
+        assign accum = in0_ext - in1_ext;
+      end else begin : is_add
+        assign accum = in0_ext + in1_ext;
+      end
+    end else if (SHIFT1 > 0) begin : shift_pos
+      // copy lower SHIFT1 bits
+      assign accum[ABS_SHIFT-1:0] = in0_ext[ABS_SHIFT-1:0];
+      // upper bits
+      if (ABS_SHIFT >= BW_INPUT0 && SIGNED0 == 0) begin : disjoint
+        // in0 unsigned, disjoint
+        if (IS_SUB == 0) begin : is_add
+          assign accum[BW_ADD-1:ABS_SHIFT] = in1_ext[BW_ADD-1:ABS_SHIFT];
+        end else begin : is_sub
+          assign accum[BW_ADD-1:ABS_SHIFT] = -in1_ext[BW_ADD-1:ABS_SHIFT];
+        end
+      end else begin : with_add
+        // in0 signed or has overlap
+        if (IS_SUB == 1) begin : is_sub
+          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] - in1_ext[BW_ADD-1:ABS_SHIFT];
+        end else begin : is_add
+          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] + in1_ext[BW_ADD-1:ABS_SHIFT];
+        end
+      end
+    end else begin : shift_neg
+      // lower |SHIFT1| bits
+      if (IS_SUB == 0) begin : lower_add
+        assign accum[ABS_SHIFT-1:0] = in1_ext[ABS_SHIFT-1:0];
+      end else begin : lower_sub
+        assign accum[ABS_SHIFT-1:0] = -in1_ext[ABS_SHIFT-1:0];
+      end
+      // upper bits
+      if (ABS_SHIFT >= BW_INPUT1 && SIGNED1 == 0) begin : disjoint
+        // in1 unsigned, disjoint
+        if (IS_SUB == 0) begin : is_add
+          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT];
+        end else begin : is_sub
+          wire [BW_ADD-1-ABS_SHIFT:0] borrow = {{(BW_ADD-1-ABS_SHIFT){1'b0}}, |in1_ext[ABS_SHIFT-1:0]};
+          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] - borrow;
+        end
+      end else begin : with_add
+        // in1 signed or has overlap
+        if (IS_SUB == 0) begin : is_add
+          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] + in1_ext[BW_ADD-1:ABS_SHIFT];
+        end else begin : is_sub
+          wire [BW_ADD-1-ABS_SHIFT:0] borrow = {{(BW_ADD-1-ABS_SHIFT){1'b0}}, |in1_ext[ABS_SHIFT-1:0]};
+          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] - in1_ext[BW_ADD-1:ABS_SHIFT] - borrow;
+        end
+      end
     end
   endgenerate
   assign out = accum[BW_OUT-1+DROP_LSBS:DROP_LSBS];
