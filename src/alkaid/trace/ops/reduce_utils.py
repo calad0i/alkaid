@@ -12,7 +12,7 @@ if typing.TYPE_CHECKING:
     from ..fixed_variable_array import FVArray
 
 
-T = typing.TypeVar('T', 'FVariable', float, np.floating)
+T = typing.TypeVar('T', 'FVariable', float, np.floating, '_ArgPair')
 TA = TypeVar('TA', 'FVArray', NDArray[np.integer | np.floating])
 
 
@@ -21,7 +21,7 @@ class Packet:
         self.value = v
 
     def __gt__(self, other: 'Packet') -> bool:  # type: ignore
-        from ..fixed_variable_array import FVariable
+        from ..fixed_variable import FVariable
 
         a, b = self.value, other.value
 
@@ -44,7 +44,7 @@ class Packet:
 
 
 def _reduce(operator: Callable[[T, T], T], arr: Sequence[T]) -> T:
-    from ..fixed_variable_array import FVariable
+    from ..fixed_variable import FVariable
 
     if isinstance(arr, np.ndarray):
         arr = arr.ravel().tolist()
@@ -68,18 +68,8 @@ def _reduce(operator: Callable[[T, T], T], arr: Sequence[T]) -> T:
     return heap[0].value
 
 
-def reduce(operator: Callable[[T, T], T], x: TA, axis: int | Sequence[int] | None = None, keepdims: bool = False) -> TA:
-    """
-    Reduce the array by the operator over the specified axis.
-    """
-    from ..fixed_variable_array import FVArray
-
-    if isinstance(x, FVArray):
-        solver_config = x.solver_options
-        arr = np.asarray(x)
-    else:
-        solver_config = None
-        arr = x
+def _prepare_reduce(arr: np.ndarray, axis: int | Sequence[int] | None, keepdims: bool):
+    """Normalize axes, transpose, and reshape for reduction."""
     all_axis = tuple(range(arr.ndim))
     axis = axis if axis is not None else all_axis
     axis = (axis,) if isinstance(axis, int) else tuple(axis)
@@ -92,13 +82,51 @@ def reduce(operator: Callable[[T, T], T], x: TA, axis: int | Sequence[int] | Non
         target_shape = tuple(d for ax, d in enumerate(arr.shape) if ax not in axis)
 
     dim_contract = prod(arr.shape[a] for a in axis)
-    arr = np.transpose(arr, xpose_axis)  # type: ignore
-    _arr = arr.reshape(-1, dim_contract)
-    _arr = np.array([_reduce(operator, _arr[i]) for i in range(_arr.shape[0])])
-    r = _arr.reshape(target_shape)  # type: ignore
+    flat = np.transpose(arr, xpose_axis).reshape(-1, dim_contract)
+    return flat, target_shape, dim_contract
 
-    if isinstance(x, FVArray):
-        r = FVArray(r, solver_config)
-        if r.shape == ():
-            return r.item()  # type: ignore
+
+def reduce(operator: Callable[[T, T], T], arr: TA, axis: int | Sequence[int] | None = None, keepdims: bool = False) -> TA:
+    """
+    Reduce the array by the operator over the specified axis.
+    """
+    from ..fixed_variable_array import FVArray
+
+    flat, target_shape, _ = _prepare_reduce(arr, axis, keepdims)
+    r = np.array([_reduce(operator, flat[i]) for i in range(flat.shape[0])]).reshape(target_shape)
+
+    if isinstance(arr, FVArray):
+        r = FVArray(r, arr.solver_options, hwconf=arr.hwconf)
+    return r if r.shape != () or keepdims else r.item()  # type: ignore
+
+
+class _ArgPair:
+    """Wraps (value, index) for argmin/argmax reduction via ``reduce``."""
+
+    __slots__ = ('val', 'idx')
+
+    def __init__(self, val, idx):
+        self.val = val
+        self.idx = idx
+
+
+def argreduce(arr: 'FVArray', axis: int | Sequence[int] | None = None, keepdims: bool = False, minimize=True):
+    """Reduction returning the index of the min or max element."""
+    from ..fixed_variable import FVariable
+    from ..fixed_variable_array import FVArray
+
+    flat, target_shape, _ = _prepare_reduce(arr, axis, keepdims)
+    _flat = np.empty(flat.shape, dtype=object)
+    for i in range(flat.shape[0]):
+        for j in range(flat.shape[1]):
+            _flat[i, j] = _ArgPair(flat[i, j], FVariable.from_const(float(j), hwconf=arr.hwconf))
+
+    def op(a: _ArgPair, b: _ArgPair) -> _ArgPair:
+        cmp = (a.val <= b.val) if minimize else (a.val >= b.val)
+        return _ArgPair(cmp.msb_mux(a.val, b.val), cmp.msb_mux(a.idx, b.idx))
+
+    r = np.array([_reduce(op, _flat[i]) for i in range(_flat.shape[0])]).reshape(target_shape)
+    r = np.vectorize(lambda p: p.idx)(r)
+    if isinstance(arr, FVArray):
+        r = FVArray(r, arr.solver_options, hwconf=arr.hwconf)
     return r if r.shape != () or keepdims else r.item()  # type: ignore

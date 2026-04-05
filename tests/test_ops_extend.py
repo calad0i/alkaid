@@ -60,6 +60,10 @@ functions = {
     'sign': lambda x, w: np.sign(x),
     'signbit': lambda x, w: np.signbit(x),
     'const_propagation': lambda x, w: x * 3 - 2 + 1.5 - 0.5 * x - 0.25 * x + 0.5,
+    'argmax': lambda x, w: np.argmax(x, axis=-1, keepdims=False),
+    'argmin': lambda x, w: np.argmin(x, axis=-1, keepdims=True),
+    'argmax_4': lambda x, w: np.argmax(x[..., :4], axis=-1, keepdims=False),
+    'argmin_4': lambda x, w: np.argmin(x[..., :4], axis=-1, keepdims=True),
 }
 
 

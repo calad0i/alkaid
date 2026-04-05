@@ -1,7 +1,7 @@
 from .einsum_utils import einsum
 from .histogram import histogram
 from .quantization import _quantize, quantize, relu
-from .reduce_utils import reduce
+from .reduce_utils import argreduce, reduce
 from .sorting import sort
 
 __all__ = [
@@ -14,4 +14,5 @@ __all__ = [
     'relu',
     'quantize',
     'sort',
+    'argreduce',
 ]

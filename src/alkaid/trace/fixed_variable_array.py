@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from .._binary import get_lsb_loc
 from ..cmvm import solve, solver_options_t
 from .fixed_variable import FVariable, FVariableInput, HWConfig, LookupTable, QInterval
-from .ops import _quantize, einsum, histogram, reduce, sort
+from .ops import _quantize, argreduce, einsum, histogram, reduce, sort
 
 T = TypeVar('T')
 
@@ -502,6 +502,20 @@ def _np_amin(*args, **kwargs):
     return reduce(_min_of, *args, **kwargs)
 
 
+@_array_fn(np.argmax)
+def _np_argmax(a, axis=None, out=None, keepdims=False):
+    if not isinstance(a, FVArray):
+        return np.argmax(to_raw_arr(a), axis=axis, out=out, keepdims=keepdims)
+    return argreduce(a, axis, keepdims, minimize=False)
+
+
+@_array_fn(np.argmin)
+def _np_argmin(a, axis=None, out=None, keepdims=False):
+    if not isinstance(a, FVArray):
+        return np.argmin(to_raw_arr(a), axis=axis, out=out, keepdims=keepdims)
+    return argreduce(a, axis, keepdims, minimize=True)
+
+
 @_array_fn(np.prod)
 def _np_prod(*args, **kwargs):
     return reduce(lambda x, y: x * y, *args, **kwargs)
@@ -801,3 +815,8 @@ def _ufunc_sign(arr: FVArray, ufunc, *inputs, **kwargs):
 @_ufunc(np.floor)
 def _ufunc_floor(arr: FVArray, ufunc, *inputs, **kwargs):
     return arr.quantize(f=0, round_mode='TRN')
+
+
+@_array_fn(np.round)
+def _np_round(x, decimals=0, **kw):
+    return x.quantize(f=0, round_mode='RND_CONV')
