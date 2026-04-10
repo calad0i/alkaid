@@ -250,7 +250,7 @@ def _load_project(path: str | Path) -> dict[str, Any]:
             line_one = (path / f'src/{top_name}.sdc').read_text().splitlines()[0]
             assert line_one.startswith('set clock_period '), f'Unexpected first line in SDC file: {line_one}'
             d['clock_period'] = float(line_one.rsplit(' ', 1)[1].strip())
-
+    d['path'] = str(path)
     return d
 
 
@@ -329,7 +329,9 @@ def pretty_print(arr: list[list]):
     print('\n'.join(header + content))
 
 
-def stdout_print(arr: list[list], full: bool, columns: list[str] | None):
+def stdout_print(
+    arr: list[list], full: bool, columns: list[str] | None, add_columns: list[str] | None, remove_columns: list[str] | None
+):
     default_columns = [
         'epoch',
         'flavor',
@@ -348,6 +350,10 @@ def stdout_print(arr: list[list], full: bool, columns: list[str] | None):
     ]
     if columns is None:
         columns = default_columns
+    if add_columns is not None:
+        columns += [col for col in add_columns if col not in columns]
+    if remove_columns is not None:
+        columns = [col for col in columns if col not in remove_columns]
 
     if not full:
         idx_row = arr[0]
@@ -384,7 +390,7 @@ def report_main(args):
 
     output = args.output
     if output == 'stdout':
-        stdout_print(arr, args.full, args.columns)
+        stdout_print(arr, args.full, args.columns, args.add_columns, args.remove_columns)
         return
 
     with open(output, 'w') as f:
@@ -442,6 +448,24 @@ def _add_report_args(parser: argparse.ArgumentParser):
         nargs='+',
         default=None,
         help='Specify columns to include in the report. Only applicable for stdout output. Ignored if --full is set.',
+    )
+
+    parser.add_argument(
+        '--add-columns',
+        '-c+',
+        type=str,
+        nargs='+',
+        default=None,
+        help='Specify additional columns to include in the report. Only applicable for stdout output. Ignored if --full is set.',
+    )
+
+    parser.add_argument(
+        '--remove-columns',
+        '-c-',
+        type=str,
+        nargs='+',
+        default=None,
+        help='Specify columns to exclude from the report. Only applicable for stdout output. Ignored if --full is set.',
     )
 
 
