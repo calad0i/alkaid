@@ -151,7 +151,7 @@ def cost_lat_bin_bitops(qint0: QInterval, qint1: QInterval, shift1: int, LUT_X: 
     if y <= 0:
         return 0, 0
     cost = 2 * y / LUT_Y * 2 ** (LUT_Y - LUT_X)
-    lat = 0.1
+    lat = 0.5
     return cost, lat
 
 
@@ -194,7 +194,7 @@ def cost_lat_op(
         case 6:  # msb_mux
             out_bw = sum(minimal_kif(op.qint))
             sf = _is_const_descendent(idx, ops, _cache)
-            return out_bw * (0.5 - 0.36 * sf), 0.5 - 0.4 * sf
+            return out_bw * (0.5 - 0.36 * sf), 1.0
         case 7:  # mul
             qint0, qint1 = ops[op.id0].qint, ops[op.id1].qint
             c, l = cost_lat_mul(qint0, qint1, n_add, n_carry)
