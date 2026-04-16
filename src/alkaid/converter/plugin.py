@@ -44,7 +44,7 @@ class ALIRTracerPluginBase:
         self,
         verbose: bool,
         inputs: tuple[FVArray, ...],
-    ) -> tuple[dict[str, FVArray], list[str]]:
+    ) -> tuple[dict[str, FVArray] | dict[str, tuple[FVArray, ...]], list[str]]:
         """Apply the model and return all intermediate traces.
 
         Parameters
@@ -102,7 +102,7 @@ class ALIRTracerPluginBase:
         inputs: tuple[FVArray, ...] | FVArray | None = None,
         inputs_kif: tuple[int, int, int] | None = None,
         dump: bool = False,
-    ) -> dict[str, FVArray] | tuple[FVArray, FVArray]:
+    ) -> dict[str, FVArray] | dict[str, tuple[FVArray, ...]] | tuple[FVArray, FVArray]:
         """Trace the model.
 
         Parameters
