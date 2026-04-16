@@ -53,6 +53,7 @@ optional-dependencies.tests = [
 urls.repository = "https://github.com/calad0i/alkaid"
 scripts.alkaid = "alkaid._cli:main"
 entry-points."alir_tracer.plugins".alkaid = "alkaid.converter.example:ExampleALIRTracer"
+entry-points."alir_tracer.plugins".keras = "alkaid.converter.builtin.keras.main:KerasALIRTracer"
 
 [tool.meson-python]
 limited-api = false
@@ -81,7 +82,10 @@ lint.fixable = [ "ALL" ]
 lint.unfixable = [  ]
 
 [tool.pytest.ini_options]
-env = [ "DA_DEFAULT_THREADS=1" ]
+env = [ "DA_DEFAULT_THREADS=1", "JAX_PLATFORMS=cpu", "CUDA_VISIBLE_DEVICES=-1" ]
+filterwarnings = [
+  "ignore: __array__ implementation doesn't accept a copy keyword:DeprecationWarning",
+]
 
 addopts = [
   "--import-mode=importlib",
