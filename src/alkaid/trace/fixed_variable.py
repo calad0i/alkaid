@@ -39,8 +39,8 @@ class TableSpec:
 
 
 def to_spec(table: NDArray[np.floating]) -> tuple[TableSpec, NDArray[np.int32], NDArray[np.bool_] | None]:
-    mask = np.isnan(table)
-    f_out = -get_lsb_loc_arr(table.astype(np.float32)).min()
+    mask = ~np.isfinite(table)
+    f_out = -get_lsb_loc_arr(table[~mask].astype(np.float32)).min()
     int_table = np.where(mask, 0, table * 2.0**f_out).astype(np.int32)
     h = sha256(int_table.data)
     if mask.any():
