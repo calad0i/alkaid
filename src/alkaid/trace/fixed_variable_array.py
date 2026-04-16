@@ -1,8 +1,9 @@
 import typing
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, SupportsIndex, TypeVar, overload
 
 import numpy as np
+from numpy import _ArrayInt_co, _ToIndices
 from numpy.typing import NDArray
 
 from .._binary import get_lsb_loc
@@ -232,6 +233,15 @@ class FVArray(np.ndarray):
         high, low = _high - step, -_high * k
         return cls.from_lhs(low, high, step, hwconf, latency, solver_options)
 
+    @overload
+    def __getitem__(self, key: _ArrayInt_co | tuple[_ArrayInt_co, ...], /) -> 'FVArray': ...
+    @overload
+    def __getitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...], /) -> 'Any': ...
+    @overload
+    def __getitem__(self, key: _ToIndices, /) -> 'FVArray': ...
+    @overload
+    def __getitem__(self, key: '_ArgsortDelayedIndex', /) -> 'FVArray': ...
+
     def __getitem__(self, key) -> 'FVArray|FVariable':  # type: ignore
         if isinstance(key, _ArgsortDelayedIndex):
             ret = sort(*key.args, **key.kwargs, aux_value=self)[1]
@@ -413,8 +423,14 @@ class RetardedFVArray(FVArray):
     def __rsub__(self, other):
         return self.apply(lambda x: other - x)
 
+    def __neg__(self):
+        return self.apply(lambda x: -x)
+
     def __truediv__(self, other):
         return self.apply(lambda x: x / other)
+
+    def __rtruediv__(self, other):
+        return self.apply(lambda x: other / x)
 
     def __array_function__(self, func, types, args, kwargs):
         if func is np.round:
