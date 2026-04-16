@@ -140,7 +140,7 @@ class ReplayOperationBase(metaclass=HandlerRegMeta):
     def __call__(self, *args, **kwargs) -> dict[str, tuple[FVArray, ...]]:
         assert all(not isinstance(a, FVArray) for a in kwargs.values())
 
-        layer: keras.layers.Layer = self.op
+        op: keras.Operation = self.op
         assert kwargs.pop('training', False) is False, 'Training mode is not supported in mirror operation'
 
         trace: dict[str, tuple[FVArray, ...]] = {}
@@ -149,7 +149,7 @@ class ReplayOperationBase(metaclass=HandlerRegMeta):
         trace['post_call'] = trace['final']
 
         if not self.__activation_handled__:
-            activation = getattr(layer, 'activation', keras.activations.linear)
+            activation = getattr(op, 'activation', keras.activations.linear)
             if activation is not keras.activations.linear:
                 if activation is keras.activations.relu:
                     assert len(trace['post_call']) == 1, 'ReLU activation is expected to have a single output'

@@ -106,7 +106,7 @@ class ReplayRepeatVector(ReplayOperationBase):
         layer: keras.layers.RepeatVector = self.op
         if layer.n == 1:
             return inputs
-        return np.repeat(inputs[None], layer.n, axis=0)[0]  # type: ignore
+        return np.repeat(inputs, layer.n, axis=0)  # type: ignore
 
 
 class ReplayGetItem(ReplayOperationBase):
@@ -115,7 +115,7 @@ class ReplayGetItem(ReplayOperationBase):
     def call(self, x: FVArray, key) -> FVArray:
         if isinstance(key, list):
             key = tuple(key)
-        return x[None][key][0]  # type: ignore
+        return x[key]  # type: ignore
 
 
 class ReplayReduction(ReplayOperationBase):
@@ -131,7 +131,7 @@ class ReplayReduction(ReplayOperationBase):
         # axis/keepdims are stored as op attributes, not passed as kwargs
         axis = self.op.axis if hasattr(self.op, 'axis') else axis
         keepdims = self.op.keepdims if hasattr(self.op, 'keepdims') else keepdims
-        return op(x[None], axis=axis, keepdims=keepdims)[0]  # type: ignore
+        return op(x, axis=axis, keepdims=keepdims)  # type: ignore
 
 
 class ReplayArithmetic(ReplayOperationBase):
@@ -159,17 +159,15 @@ class ReplayArithmetic(ReplayOperationBase):
 class ReplayConcatenate(ReplayOperationBase):
     handles = (Concatenate,)
 
-    def call(self, xs: Sequence[FVArray]):
-        axis = self.op.axis
-        return np.concatenate([x[None] for x in xs], axis=axis)[0]  # type: ignore
+    def call(self, xs: Sequence[FVArray]) -> FVArray:
+        return np.concatenate(list(xs), axis=self.op.axis)  # type: ignore
 
 
 class ReplayRepeat(ReplayOperationBase):
     handles = (Repeat,)
 
-    def call(self, x: FVArray):
-        repeats, axis = self.op.repeats, self.op.axis
-        return np.repeat(x[None], repeats, axis=axis)[0]  # type: ignore
+    def call(self, x: FVArray) -> FVArray:
+        return np.repeat(x, self.op.repeats, axis=self.op.axis)  # type: ignore
 
 
 class ReplayTranspose(ReplayOperationBase):
@@ -184,8 +182,7 @@ class ReplayMoveaxis(ReplayOperationBase):
     handles = (Moveaxis,)
 
     def call(self, x: FVArray):
-        source, destination = self.op.source, self.op.destination
-        return np.moveaxis(x[None], source, destination)[0]  # type: ignore
+        return np.moveaxis(x, self.op.source, self.op.destination)  # type: ignore
 
 
 class ReplayNoOp(ReplayOperationBase):
@@ -218,7 +215,7 @@ class ReplayEinsum(ReplayOperationBase):
         if isinstance(op, Einsum):
             eq = op.subscripts
         else:  # QDot/Dot
-            dim0, dim1 = inputs[0].ndim + 1, inputs[1].ndim + 1
+            dim0, dim1 = inputs[0].ndim, inputs[1].ndim
             letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'[0 : dim0 + dim1]
             sub0, sub1 = letters[:dim0], letters[dim0 : dim0 + dim1]
             axes = list(op.axes) if not isinstance(op.axes, int) else [op.axes, op.axes]
@@ -229,14 +226,14 @@ class ReplayEinsum(ReplayOperationBase):
             sub_out.remove(sub0[idx0])
             sub_out = ''.join(sub_out)
             eq = f'{sub0},{sub1}->{sub_out}'
-        return einsum(eq, inputs[0][None], inputs[1][None])[0]  # type: ignore
+        return einsum(eq, inputs[0], inputs[1])  # type: ignore
 
 
 class ReplayMatmul(ReplayOperationBase):
     handles = (Matmul, Dot)
 
     def call(self, x1: FVArray, x2: FVArray) -> FVArray:
-        return einsum('...ij,...jk->...ik', x1[None], x2[None])[0]  # type: ignore
+        return einsum('...ij,...jk->...ik', x1, x2)  # type: ignore
 
 
 class ReplayAbs(ReplayOperationBase):

@@ -36,25 +36,19 @@ class ReplayPool(ReplayOperationBase):
             assert 'Average' in cname, f'Unsupported global pooling layer: {cname}'
             op = 'avg'
 
-        # Strip leading batch dim (FVArray always has batch=1 from get_input_shapes)
-        has_batch = inputs.shape[0] == 1 and inputs.ndim > 2
-        if has_batch:
-            inputs = inputs[0]
-
         data_format = self.op.data_format
         if data_format == 'channels_first':
-            inputs = np.moveaxis(inputs, 0, -1)  # type: ignore
+            inputs = np.moveaxis(inputs, 1, -1)  # type: ignore
 
         if isinstance(self.op, BaseGlobalPooling):
-            # Reduce all spatial dims (everything except last = channels)
-            axis = tuple(range(inputs.ndim - 1))
+            # Reduce all spatial dims: everything between batch (0) and channels (-1)
+            axis = tuple(range(1, inputs.ndim - 1))
             keepdims = self.op.keepdims
 
             if op == 'max':
                 out = np.amax(inputs, axis=axis, keepdims=keepdims)  # type: ignore
-            elif op == 'avg':
-                pool_size = prod(inputs.shape[:-1])
-                out = np.sum(inputs, axis=axis, keepdims=keepdims) / pool_size  # type: ignore
+            else:  # avg
+                out = np.sum(inputs, axis=axis, keepdims=keepdims) / prod(inputs.shape[1:-1])  # type: ignore
         else:
             assert isinstance(self.op, BasePooling), f'Unknown pooling layer: {type(self.op)}'
             pool_size = self.op.pool_size
@@ -69,7 +63,7 @@ class ReplayPool(ReplayOperationBase):
                 padding=padding,
                 data_format='channels_last',
             )
-            x = x.reshape(x.shape[:-1] + (-1, ch))
+            x = x.reshape(x.shape[:-1] + (-1, ch))  # (batch, out_spa..., kernel_volume, ch)
 
             if padding == 'same':
                 _mask = symbolic_extract_patches(
@@ -89,16 +83,10 @@ class ReplayPool(ReplayOperationBase):
                 _vars = np.where(_mask, x, -2147483648)  # type: ignore
                 x = FVArray(_vars, x.solver_options)
                 out = np.max(x, axis=-2)  # type: ignore
-            elif op == 'avg':
+            else:  # avg
                 out = np.sum(x, axis=-2) / np.sum(_mask, axis=-2)  # type: ignore
-            else:
-                raise ValueError(f'Unknown pooling operation: {op}')
 
         if data_format == 'channels_first':
-            out = np.moveaxis(out, -1, 0)  # type: ignore
-
-        # Re-add batch dim
-        if has_batch:
-            out = out[None]  # type: ignore
+            out = np.moveaxis(out, -1, 1)  # type: ignore
 
         return out  # type: ignore

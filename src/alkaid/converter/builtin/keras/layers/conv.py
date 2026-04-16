@@ -21,7 +21,11 @@ def symbolic_extract_patches_3d(
     data_format: str,
     pad_value: float = 0,
 ) -> T:
-    img_tensor = ops.cast(ops.reshape(ops.arange(images.size), images.shape), dtype='float32')
+
+    batch = images.shape[0]
+    per_sample_shape = images.shape[1:]
+    n = int(np.prod(per_sample_shape))
+    img_tensor = ops.cast(ops.reshape(ops.arange(n), per_sample_shape), dtype='float32')
     img_tensor = -img_tensor - 1
     out_tensor = extract_patches_3d(
         img_tensor[None],
@@ -34,16 +38,15 @@ def symbolic_extract_patches_3d(
     out_index: np.ndarray = ops.convert_to_numpy(out_tensor).round().astype(np.int32)  # type: ignore
     mask = out_index == 0
     out_index = np.where(mask, 0, -out_index - 1)
-    images = images.ravel()[out_index]  # type: ignore
 
-    if isinstance(images, FVArray):
-        _vars = np.asarray(images)
+    flat = images.reshape((batch, -1))
+    gathered = np.take(flat, out_index, axis=1)  # (batch, *out_index.shape)
+
+    if isinstance(gathered, FVArray):
+        _vars = np.asarray(gathered)
         _vars = np.where(mask, pad_value, _vars)
-        images = FVArray(_vars, images.solver_options)  # type: ignore
-    else:
-        images = np.where(mask, pad_value, images)
-
-    return images
+        return FVArray(_vars, gathered.solver_options)  # type: ignore
+    return np.where(mask, pad_value, gathered)  # type: ignore
 
 
 def symbolic_extract_patches(
@@ -55,7 +58,8 @@ def symbolic_extract_patches(
     data_format: str,
     pad_value: float = 0,
 ) -> T:
-    rank = images.ndim - 1
+
+    rank = images.ndim - 2  # strip batch and channels
     size = (size,) * rank if isinstance(size, int) else size
     strides = (strides,) * rank if isinstance(strides, int) else strides
     dilation_rate = (dilation_rate,) * rank if isinstance(dilation_rate, int) else dilation_rate
@@ -71,10 +75,10 @@ def symbolic_extract_patches(
 
     _pad = (1,) * pad_rank
     if data_format == 'channels_first':
-        images = np.moveaxis(images, 0, -1)  # type: ignore
+        images = np.moveaxis(images, 1, -1)  # type: ignore
 
-    *spa, ch = images.shape
-    images = images.reshape(*_pad, *spa, ch)  # type: ignore
+    batch, *spa, ch = images.shape
+    images = images.reshape(batch, *_pad, *spa, ch)  # type: ignore
 
     r = symbolic_extract_patches_3d(
         images,
@@ -85,8 +89,8 @@ def symbolic_extract_patches(
         data_format='channels_last',
         pad_value=pad_value,
     )
-
-    return r.reshape(r.shape[pad_rank:])
+    # r.shape = (batch, 1..1, out_spa..., kernel_volume*ch); drop padded spatial dims
+    return r.reshape((r.shape[0],) + r.shape[1 + pad_rank :])
 
 
 class ReplayExtractPatches(ReplayOperationBase):
@@ -113,43 +117,28 @@ class ReplayConv(ReplayOperationBase):
         layer: Conv1D | Conv2D | Conv3D = self.op
         kernel = self._load_weight('kernel')
         bias = self._load_weight('bias')
-        strides = layer.strides
-        padding = layer.padding
-        dilation_rate = layer.dilation_rate
         groups = layer.groups
-
-        # Strip leading batch dim (FVArray always has batch=1 from get_input_shapes)
-        has_batch = inputs.shape[0] == 1 and inputs.ndim > len(layer.kernel_size) + 1
-        if has_batch:
-            inputs = inputs[0]
 
         x = symbolic_extract_patches(
             inputs,
             size=layer.kernel_size,
-            strides=strides,
-            dilation_rate=dilation_rate,
-            padding=padding,
+            strides=layer.strides,
+            dilation_rate=layer.dilation_rate,
+            padding=layer.padding,
             data_format=layer.data_format,
         )
-
-        if layer.data_format == 'channels_first':
-            inputs = np.moveaxis(inputs, 0, -1)  # type: ignore
+        # x.shape = (batch, out_spa..., kernel_volume * ch_in)
 
         ch_out = kernel.shape[-1]
-
         _ch_out = ch_out // groups
-
         x = x.reshape(*x.shape[:-1], -1, groups)  # type: ignore
         kernel = kernel.reshape(-1, groups, _ch_out)
 
         outputs = np.einsum('...ig,igo->...go', x, kernel)  # type: ignore
         outputs = outputs.reshape(*outputs.shape[:-2], -1) + bias  # type: ignore
+        # outputs.shape = (batch, out_spa..., ch_out) in channels_last
 
         if layer.data_format == 'channels_first':
-            outputs: FVArray = np.moveaxis(outputs, -1, 0)  # type: ignore
+            outputs = np.moveaxis(outputs, -1, 1)  # type: ignore
 
-        # Re-add batch dim
-        if has_batch:
-            outputs = outputs[None]  # type: ignore
-
-        return outputs
+        return outputs  # type: ignore
