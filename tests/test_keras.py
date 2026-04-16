@@ -9,7 +9,7 @@ from alkaid.converter import trace_model
 from alkaid.trace import trace
 
 
-def _qdata(shape, kif, seed=0):
+def _qdata(shape, kif, seed=0) -> np.ndarray:
     k, i, f = kif
     rng = np.random.default_rng(seed)
     hi = 2.0**i - 2.0**-f
@@ -32,20 +32,23 @@ def _perturb_weights(model, fbits=2, seed=42):
     model.set_weights(new_weights)
 
 
-def _run(op, shapes, kif=(1, 4, 4), n=65536, perturb_weights=True, configure=None):
+def _run(op, shapes, kif=(1, 4, 4), n=65536, perturb_weights=True, hook_model=None, hook_data=None):
     inps = [layers.Input(shape=s) for s in shapes]
     out = op(inps[0]) if len(inps) == 1 else op(inps)
     model = keras.Model(inps[0] if len(inps) == 1 else inps, out)
     if perturb_weights:
         _perturb_weights(model)
-    if configure is not None:
-        configure(model)
+    if hook_model is not None:
+        hook_model(model)
     datas = [_qdata((n,) + s, kif, seed=i) for i, s in enumerate(shapes)]
-    data_in = datas[0] if len(datas) == 1 else datas
+    if hook_data is not None:
+        datas = hook_data(datas)
     trace_inp, trace_out = trace_model(model, inputs_kif=kif)
     comb = trace(trace_inp, trace_out)
-    expected: np.ndarray = ops.convert_to_numpy(model(data_in))  # type: ignore
-    actual = comb.predict(data_in).reshape(expected.shape)
+    data_keras = datas[0] if len(datas) == 1 else datas
+    expected: np.ndarray = ops.convert_to_numpy(model(data_keras))  # type: ignore
+    data_comb = np.concatenate([x.reshape((n, -1)) for x in datas], axis=1)
+    actual = comb.predict(data_comb).reshape(expected.shape)
     np.testing.assert_array_equal(actual, expected)
 
 
@@ -57,8 +60,8 @@ def _run(op, shapes, kif=(1, 4, 4), n=65536, perturb_weights=True, configure=Non
 class TestDense:
     @pytest.fixture(
         params=[
-            (layers.Dense(4, use_bias=True), (8,)),
-            (layers.Dense(4, use_bias=False), (8,)),
+            (layers.Dense(4, use_bias=True, activation='relu'), (8,)),
+            (layers.Dense(4, use_bias=False, activation=keras.activations.hard_tanh), (8,)),
             (layers.EinsumDense('...c,cd->...d', output_shape=(4,)), (4, 8)),
         ],
         ids=['Dense[bias]', 'Dense[nobias]', 'EinsumDense'],
@@ -94,7 +97,7 @@ class TestBatchNorm:
         # epsilon=0 so scale = gamma / sqrt(variance) is exact when variance is a perfect square
         # variance=0.0625 -> sqrt=0.25 -> scale = gamma*4
         # gamma=0.25 -> scale=1.0; beta=0.5, mean=0.25 -> offset = 0.5 - 0.25*1.0 = 0.25
-        def configure(model):
+        def hook_model(model):
             model.layers[1].set_weights(
                 [
                     np.full(8, 0.25, dtype=np.float32),  # gamma
@@ -104,10 +107,10 @@ class TestBatchNorm:
                 ]
             )
 
-        _run(layers.BatchNormalization(epsilon=0), [(8,)], kif=(1, 2, 4), configure=configure)
+        _run(layers.BatchNormalization(epsilon=0), [(8,)], kif=(1, 2, 4), hook_model=hook_model)
 
 
-class TestActivation:
+class TestReLU:
     @pytest.fixture(
         params=[
             layers.ReLU(),
@@ -121,6 +124,81 @@ class TestActivation:
 
     def test(self, op):
         _run(op, [(8,)])
+
+
+def custom(x):
+    return ops.sin(x) + ops.cos(x)
+
+
+class TestActivation:
+    @pytest.fixture(
+        params=[
+            keras.activations.linear,
+            keras.activations.relu,
+            keras.activations.tanh,
+            keras.activations.sigmoid,
+            keras.activations.swish,
+            keras.activations.gelu,
+            keras.activations.elu,
+            keras.activations.selu,
+            keras.activations.silu,
+            keras.activations.softplus,
+            keras.activations.softsign,
+            keras.activations.exponential,
+            keras.activations.hard_silu,
+            keras.activations.hard_sigmoid,
+            keras.activations.hard_swish,
+            keras.activations.log_sigmoid,
+            keras.activations.hard_tanh,
+            custom,
+        ]
+    )
+    def activation(self, request):
+        return request.param
+
+    def test(self, activation) -> None:
+        _run(lambda x: ops.round(layers.Activation(activation)(x) * 16), [(8,)], kif=(1, 2, 4))
+
+
+class TestUnaryNonlinear:
+    """LUT-backed unary functions: follow with *n then floor for non-trivial output."""
+
+    @pytest.fixture(
+        params=[
+            ops.sin,
+            ops.cos,
+            ops.tanh,
+            ops.sinh,
+            ops.cosh,
+            ops.arccos,
+            ops.arcsin,
+            ops.arctanh,
+            ops.arcsinh,
+            ops.log,
+            ops.exp,
+            ops.expm1,
+            ops.log1p,
+            ops.sigmoid,
+            ops.silu,
+            ops.hard_sigmoid,
+            ops.hard_swish,
+            ops.gelu,
+            ops.elu,
+            ops.selu,
+            ops.sign,
+        ]
+    )
+    def fn(self, request):
+        return request.param
+
+    @pytest.fixture
+    def op(self, fn):
+        return lambda x: ops.round(fn(x) * 16)
+
+    def test(self, op, fn):
+        # Use smaller range to avoid float32 precision issues at tanh/etc boundaries
+        hook_data = lambda x: x if fn is not ops.log else [np.maximum(2.0**-5, d) for d in x]
+        _run(op, [(8,)], kif=(1, -1, 5), hook_data=hook_data)
 
 
 class TestPooling:
@@ -226,25 +304,6 @@ class TestUnaryOp:
 
     def test(self, op):
         _run(op, [(8,)])
-
-
-class TestLUT:
-    """LUT-backed unary functions: follow with *n then floor for non-trivial output."""
-
-    @pytest.fixture(
-        params=[
-            lambda x: ops.floor(ops.sin(x) * 16),
-            lambda x: ops.floor(ops.cos(x) * 16),
-            lambda x: ops.floor(ops.tanh(x) * 16),
-        ],
-        ids=['sin', 'cos', 'tanh'],
-    )
-    def op(self, request):
-        return request.param
-
-    def test(self, op):
-        # Use smaller range to avoid float32 precision issues at tanh/etc boundaries
-        _run(op, [(8,)], kif=(1, 2, 4))
 
 
 class TestContraction:

@@ -85,6 +85,8 @@ lint.unfixable = [  ]
 env = [ "DA_DEFAULT_THREADS=1", "JAX_PLATFORMS=cpu", "CUDA_VISIBLE_DEVICES=-1" ]
 filterwarnings = [
   "ignore: __array__ implementation doesn't accept a copy keyword:DeprecationWarning",
+  "ignore: divide by zero encountered in log:RuntimeWarning",
+  "ignore: invalid value encountered in log:RuntimeWarning",
 ]
 
 addopts = [

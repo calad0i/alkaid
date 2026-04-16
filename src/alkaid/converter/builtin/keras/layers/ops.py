@@ -1,13 +1,19 @@
+import re
 from collections.abc import Sequence
 
 import keras
 import numpy as np
+from keras.src.ops.nn import Elu, Gelu, HardSigmoid, HardSilu, Selu, Sigmoid, Silu
 from keras.src.ops.numpy import (
     Abs,
     Absolute,
     Add,
     Amax,
     Amin,
+    Arccos,
+    Arcsin,
+    Arcsinh,
+    Arctanh,
     Argmax,
     Argmin,
     Argsort,
@@ -20,9 +26,11 @@ from keras.src.ops.numpy import (
     Dot,
     Einsum,
     Exp,
+    Expm1,
     Floor,
     GetItem,
     Log,
+    Log1p,
     Matmul,
     Max,
     Maximum,
@@ -53,6 +61,7 @@ from alkaid.trace import FVArray
 from alkaid.trace.ops import einsum
 
 from ._base import ReplayOperationBase
+from .activation import keras_numpy_unary_map
 
 
 class ReplayReshape(ReplayOperationBase):
@@ -214,7 +223,7 @@ class ReplayEinsum(ReplayOperationBase):
 
         if isinstance(op, Einsum):
             eq = op.subscripts
-        else:  # QDot/Dot
+        else:  # Dot
             dim0, dim1 = inputs[0].ndim, inputs[1].ndim
             letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'[0 : dim0 + dim1]
             sub0, sub1 = letters[:dim0], letters[dim0 : dim0 + dim1]
@@ -316,11 +325,37 @@ class ReplaySort(ReplayOperationBase):
 
 
 class ReplayUnary(ReplayOperationBase):
-    handles = (Sin, Cos, Tan, Exp, Log, Sqrt, Sign, Signbit, Sinh, Cosh, Tanh)
+    handles = (
+        Sin,
+        Cos,
+        Tan,
+        Exp,
+        Log,
+        Sqrt,
+        Sign,
+        Signbit,
+        Sinh,
+        Cosh,
+        Tanh,
+        Arccos,
+        Arcsin,
+        Arctanh,
+        Arcsinh,
+        Expm1,
+        Log1p,
+    )
 
     def call(self, x: FVArray) -> FVArray:
         name = self.op.__class__.__name__
         return getattr(np, name.lower())(x)
+
+
+class ReplayKerasNNActivation(ReplayOperationBase):
+    handles = (Sigmoid, Silu, HardSigmoid, HardSilu, Gelu, Elu, Selu)
+
+    def call(self, x: FVArray) -> FVArray:
+        snake_name = re.sub(r'(?<!^)(?=[A-Z])', '_', self.op.__class__.__name__).lower()
+        return keras_numpy_unary_map[snake_name](x)  # type: ignore
 
 
 class ReplayPad(ReplayOperationBase):

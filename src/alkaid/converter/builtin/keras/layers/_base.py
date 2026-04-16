@@ -3,77 +3,9 @@ from typing import Any
 
 import keras
 import numpy as np
-from keras import ops
 from keras.ops import convert_to_numpy
 
 from alkaid.trace import FVariable, FVArray
-from alkaid.trace.ops import relu
-
-
-def _selu(arr: np.ndarray):
-    alpha = 1.6732632423543772
-    scale = 1.0507009873554805
-    if isinstance(arr, FVArray):
-        return arr.apply(lambda x: scale * np.where(x > 0, x, alpha * (np.exp(x) - 1)))
-    else:
-        return scale * np.where(arr > 0, arr, alpha * (np.exp(arr) - 1))
-
-
-def _glu(arr: np.ndarray):
-    if isinstance(arr, FVArray):
-        return arr.apply(lambda x: x * (1 / (1 + np.exp(-x))))
-    else:
-        return arr * (1 / (1 + np.exp(-arr)))
-
-
-def _gelu(arr: np.ndarray):
-    if isinstance(arr, FVArray):
-        return arr.apply(lambda x: 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * np.power(x, 3)))))
-    else:
-        return 0.5 * arr * (1 + np.tanh(np.sqrt(2 / np.pi) * (arr + 0.044715 * np.power(arr, 3))))
-
-
-def _swish(arr: np.ndarray):
-    if isinstance(arr, FVArray):
-        return arr.apply(lambda x: x / (1 + np.exp(-x)))
-    else:
-        return arr / (1 + np.exp(-arr))
-
-
-def _softsign(arr: np.ndarray):
-    if isinstance(arr, FVArray):
-        return arr.apply(lambda x: x / (1 + np.abs(x)))
-    else:
-        return arr / (1 + np.abs(arr))
-
-
-keras_numpy_unary_map = {
-    keras.activations.linear: lambda x: x,
-    keras.activations.relu: lambda x: np.maximum(0, x),
-    keras.activations.tanh: np.tanh,
-    keras.activations.sigmoid: lambda x: 1 / (1 + np.exp(-x)),
-    keras.activations.swish: _swish,
-    keras.activations.gelu: _gelu,
-    keras.activations.elu: lambda x: np.where(x > 0, x, np.exp(x) - 1),
-    keras.activations.selu: _selu,
-    keras.activations.silu: lambda x: x / (1 + np.exp(-x)),
-    keras.activations.softplus: lambda x: np.log1p(np.exp(x)),
-    keras.activations.softsign: _softsign,
-    keras.activations.exponential: lambda x: np.exp(x),
-    keras.activations.hard_silu: lambda x: x * np.minimum(1, np.maximum(0, (x + 1) / 2)),
-    keras.activations.hard_sigmoid: lambda x: np.minimum(1, np.maximum(0, (x + 1) / 2)),
-    keras.activations.hard_swish: lambda x: x * np.minimum(1, np.maximum(0, (x + 1) / 2)),
-    keras.activations.log_sigmoid: lambda x: -np.log1p(np.exp(-x)),
-    keras.activations.glu: _glu,
-}
-
-
-def keras_activation_to_numpy(activation: Any) -> Any:
-    assert activation is not keras.activations.softmax, 'Softmax activation is not supported in keras_activation_to_numpy.'
-    if activation in keras_numpy_unary_map:
-        return keras_numpy_unary_map[activation]
-    else:
-        return lambda x: ops.convert_to_numpy(activation(ops.convert_to_tensor(x)))
 
 
 def to_np_arr(x: Any) -> np.ndarray:
@@ -138,6 +70,8 @@ class ReplayOperationBase(metaclass=HandlerRegMeta):
         return r
 
     def __call__(self, *args, **kwargs) -> dict[str, tuple[FVArray, ...]]:
+        from .activation import keras_unary_to_numpy
+
         assert all(not isinstance(a, FVArray) for a in kwargs.values())
 
         op: keras.Operation = self.op
@@ -149,16 +83,9 @@ class ReplayOperationBase(metaclass=HandlerRegMeta):
         trace['post_call'] = trace['final']
 
         if not self.__activation_handled__:
-            activation = getattr(op, 'activation', keras.activations.linear)
-            if activation is not keras.activations.linear:
-                if activation is keras.activations.relu:
-                    assert len(trace['post_call']) == 1, 'ReLU activation is expected to have a single output'
-                    trace['final'] = (relu(trace['post_call'][0]),)
-                else:
-                    raise NotImplementedError(
-                        f'Activation {activation} is not allowed in activation= field for common layers.'
-                        ' Use dedicated QUnaryFunctionLUT layer instead.'
-                    )
+            activation = keras_unary_to_numpy(getattr(op, 'activation', keras.activations.linear), allow_unknown=False)
+            assert len(trace['post_call']) == 1
+            trace['final'] = (activation(trace['post_call'][0]),)
 
         trace['final'] = trace.pop('final')
 
