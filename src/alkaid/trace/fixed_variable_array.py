@@ -3,13 +3,15 @@ from collections.abc import Callable
 from typing import Any, SupportsIndex, TypeVar, overload
 
 import numpy as np
-from numpy import _ArrayInt_co, _ToIndices
 from numpy.typing import NDArray
 
 from .._binary import get_lsb_loc
 from ..cmvm import solve, solver_options_t
 from .fixed_variable import FVariable, FVariableInput, HWConfig, LookupTable, QInterval
 from .ops import _quantize, argreduce, einsum, histogram, reduce, searchsorted, sort
+
+if typing.TYPE_CHECKING:
+    from numpy import _ArrayInt_co, _ToIndices
 
 T = TypeVar('T')
 
@@ -234,11 +236,11 @@ class FVArray(np.ndarray):
         return cls.from_lhs(low, high, step, hwconf, latency, solver_options)
 
     @overload
-    def __getitem__(self, key: _ArrayInt_co | tuple[_ArrayInt_co, ...], /) -> 'FVArray': ...
+    def __getitem__(self, key: '_ArrayInt_co | tuple[_ArrayInt_co, ...]', /) -> 'FVArray': ...
     @overload
-    def __getitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...], /) -> 'Any': ...
+    def __getitem__(self, key: 'SupportsIndex | tuple[SupportsIndex, ...]', /) -> 'Any': ...
     @overload
-    def __getitem__(self, key: _ToIndices, /) -> 'FVArray': ...
+    def __getitem__(self, key: '_ToIndices', /) -> 'FVArray': ...
     @overload
     def __getitem__(self, key: '_ArgsortDelayedIndex', /) -> 'FVArray': ...
 
@@ -284,10 +286,10 @@ class FVArray(np.ndarray):
     ):
         shape = self.shape
         if any(x is None for x in (k, i, f)):
-            kif = self.kif
-        k = np.broadcast_to(k, shape) if k is not None else kif[0]  # type: ignore
-        i = np.broadcast_to(i, shape) if i is not None else kif[1]  # type: ignore
-        f = np.broadcast_to(f, shape) if f is not None else kif[2]  # type: ignore
+            _k, _i, _f = self.kif
+        k = np.broadcast_to(k, shape) if k is not None else _k  # type: ignore
+        i = np.broadcast_to(i, shape) if i is not None else _i  # type: ignore
+        f = np.broadcast_to(f, shape) if f is not None else _f  # type: ignore
         ret = [
             v.quantize(k=kk, i=ii, f=ff, overflow_mode=overflow_mode, round_mode=round_mode)
             for v, kk, ii, ff in zip(np.asarray(self).ravel(), k.ravel(), i.ravel(), f.ravel())  # type: ignore
@@ -360,6 +362,16 @@ class FVArray(np.ndarray):
         for i in range(_arr.size):
             _arr.ravel()[i] = FVariableInput(latency, hwconf)
         return cls.__new__(cls, _arr, solver_options, hwconf=hwconf)
+
+    def __eq__(self, other):
+        a, b = np.broadcast_arrays(self, other)
+        r = np.array([[v1._eq(v2) for v1, v2 in zip(a.ravel(), b.ravel())]]).reshape(a.shape)
+        return FVArray(r, self.solver_options, hwconf=self.hwconf)
+
+    def __ne__(self, other):
+        a, b = np.broadcast_arrays(self, other)
+        r = np.array([[v1._ne(v2) for v1, v2 in zip(a.ravel(), b.ravel())]]).reshape(a.shape)
+        return FVArray(r, self.solver_options, hwconf=self.hwconf)
 
 
 class FVArrayInput(FVArray):
@@ -435,16 +447,10 @@ class RetardedFVArray(FVArray):
     def __array_function__(self, func, types, args, kwargs):
         if func is np.round:
             # For some reason np.round is registered as array function but not ufunc...
-            return self.apply(np.round).quantize()
+            return super().__array_function__(func, types, args, kwargs)
         raise RuntimeError(
             f'RetardedFVArray only supports quantization or further unary mapping operations. Got array function {func}.'
         )
-
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        v = super().__array_ufunc__(ufunc, method, *inputs, **kwargs)
-        if ufunc in (np.round, np.ceil, np.floor) and method == '__call__':
-            return v.quantize()
-        return v
 
     def apply(self, fn: Callable[[NDArray], NDArray]) -> 'RetardedFVArray':
         return RetardedFVArray(
@@ -848,9 +854,26 @@ def _ufunc_sign(arr: FVArray, ufunc, *inputs, **kwargs):
 
 @_ufunc(np.floor)
 def _ufunc_floor(arr: FVArray, ufunc, *inputs, **kwargs):
-    return arr.quantize(f=0, round_mode='TRN')
+    if isinstance(arr, RetardedFVArray):
+        return arr.apply(np.floor).quantize()
+    _k, _i, _ = arr.kif
+    _i = np.maximum(_i + 1, 1)
+    return arr.quantize(_k, _i, 0, round_mode='TRN')
+
+
+@_ufunc(np.ceil)
+def _ufunc_ceil(arr: FVArray, ufunc, *inputs, **kwargs):
+    if isinstance(arr, RetardedFVArray):
+        return arr.apply(np.ceil).quantize()
+    _floor = np.floor(arr)
+    return np.where(arr.quantize(k=0, i=0), _floor + 1, _floor)
 
 
 @_array_fn(np.round)
-def _np_round(x, decimals=0, **kw):
-    return x.quantize(f=0, round_mode='RND_CONV')
+def _np_round(a: FVArray, decimals=0, **kw):
+    assert decimals == 0, 'Rounding to non-integer decimals is not supported for FVArray'
+    if isinstance(a, RetardedFVArray):
+        return a.apply(np.round).quantize()
+    _k, _i, _ = a.kif
+    _i = np.maximum(_i + 1, 1)
+    return a.quantize(_k, _i, 0, round_mode='RND_CONV')
