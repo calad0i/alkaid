@@ -283,3 +283,34 @@ class TestPad:
 
     def test(self, op):
         _run(op, [(5,)])
+
+
+class TestGetItem:
+    @pytest.fixture(
+        params=[
+            lambda x: x[:, :4],
+            lambda x: x[:, 2::2, ::-1],
+            lambda x: x[:, ::2, 8:2:-2],
+        ],
+        ids=['slice', 'slice_step', 'index_array'],
+    )
+    def op(self, request):
+        return request.param
+
+    def test(self, op):
+        _run(op, [(8, 8)])
+
+
+class TestRepeat:
+    @pytest.fixture(
+        params=[
+            layers.RepeatVector(4),
+            partial(ops.repeat, repeats=4, axis=1),
+        ],
+        ids=['RepeatVector', 'repeat'],
+    )
+    def op(self, request):
+        return request.param
+
+    def test(self, op):
+        _run(op, [(8,)], kif=(1, 2, 4))
