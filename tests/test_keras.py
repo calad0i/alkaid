@@ -53,8 +53,7 @@ def _run(op, shapes, kif=(1, 4, 4), n=65536, perturb_weights=True, hook_model=No
     comb = trace(trace_inp, trace_out)
     data_keras = datas[0] if len(datas) == 1 else datas
     expected: np.ndarray = ops.convert_to_numpy(model(data_keras))  # type: ignore
-    data_comb = np.concatenate([x.reshape((n, -1)) for x in datas], axis=1)
-    actual = comb.predict(data_comb).reshape(expected.shape)
+    actual = comb.predict(data_keras).reshape(expected.shape)
     np.testing.assert_array_equal(actual, expected)
 
 
@@ -89,8 +88,22 @@ class TestConv:
             (layers.Conv2D(4, (3, 4), padding='same'), (8, 8, 3)),
             (layers.Conv2D(4, 3, padding='valid', groups=2), (6, 6, 4)),
             (layers.Conv2D(6, 3, padding='same', groups=3), (6, 6, 6)),
+            # channels_first: shape is (C, *spa)
+            (layers.Conv1D(4, 3, padding='valid', data_format='channels_first'), (3, 16)),
+            (layers.Conv2D(4, 3, padding='same', data_format='channels_first'), (3, 8, 8)),
+            (layers.Conv2D(6, 3, padding='valid', groups=3, data_format='channels_first'), (6, 6, 6)),
         ],
-        ids=['Conv1D[valid]', 'Conv1D[same]', 'Conv2D[valid]', 'Conv2D[same]', 'Conv2D[g=2]', 'Conv2D[g=3]'],
+        ids=[
+            'Conv1D[valid]',
+            'Conv1D[same]',
+            'Conv2D[valid]',
+            'Conv2D[same]',
+            'Conv2D[g=2]',
+            'Conv2D[g=3]',
+            'Conv1D[CF]',
+            'Conv2D[CF,same]',
+            'Conv2D[CF,g=3]',
+        ],
     )
     def case(self, request):
         return request.param
@@ -599,8 +612,9 @@ class TestDepthwiseConv:
             (layers.DepthwiseConv1D(3, padding='same'), (8, 3)),
             (layers.DepthwiseConv2D(3, padding='same', depth_multiplier=2), (6, 6, 3)),
             (layers.DepthwiseConv2D(3, padding='valid'), (6, 6, 3)),
+            (layers.DepthwiseConv2D(3, padding='same', data_format='channels_first'), (3, 6, 6)),
         ],
-        ids=['1D', '2D[dm=2]', '2D[valid]'],
+        ids=['1D', '2D[dm=2]', '2D[valid]', '2D[CF]'],
     )
     def case(self, request):
         return request.param
@@ -616,8 +630,22 @@ class TestRescaling:
 
 
 class TestNormalization:
-    def test(self):
-        l = layers.Normalization(axis=-1, mean=[0.0, 1.0, 2.0, 3.0], variance=[1.0, 1.0, 1.0, 1.0])
+    @pytest.mark.parametrize(
+        'invert,variance',
+        [
+            (False, [1.0, 1.0, 1.0, 1.0]),
+            (False, [4.0, 4.0, 0.25, 0.25]),  # std has exact-pow2 reciprocal → bit-exact
+            (True, [1.0, 4.0, 0.25, 1.0]),  # invert: y = x * std + mean, always bit-exact
+        ],
+        ids=['plain', 'scaled', 'invert'],
+    )
+    def test(self, invert, variance):
+        l = layers.Normalization(
+            axis=-1,
+            mean=[0.0, 1.0, 2.0, 3.0],
+            variance=variance,
+            invert=invert,
+        )
         l.build((None, 4))
         _run(l, [(4,)], kif=(1, 2, 4))
 
@@ -628,15 +656,15 @@ class TestPermute:
 
 
 class TestCategoryEncoding:
-    def test(self):
+    @pytest.mark.parametrize('mode', ['one_hot', 'multi_hot', 'count'])
+    def test(self, mode):
         V = 6
         kif = (0, 3, 0)  # unsigned integer in [0, 8)
 
         def hook_data(datas):
-            # Clamp to [0, V)
-            return [np.clip(d, 0, V - 1) for d in datas]
+            return [np.clip(d, 0, V - 1).astype(np.int32) for d in datas]
 
-        _run(layers.CategoryEncoding(num_tokens=V, output_mode='one_hot'), [(3,)], kif=kif, hook_data=hook_data)
+        _run(layers.CategoryEncoding(num_tokens=V, output_mode=mode), [(4,)], kif=kif, hook_data=hook_data)
 
 
 def _run_embedding(V=6, D=4, shape=(3,)):

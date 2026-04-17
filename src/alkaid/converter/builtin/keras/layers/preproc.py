@@ -21,19 +21,22 @@ class ReplayNormalization(ReplayOperationBase):
     def fused_scale_offset(self) -> tuple[np.ndarray, np.ndarray]:
         """Return the fused ``(scale, offset)`` such that ``output = input * scale + offset``.
 
-        For ``invert=False`` the transform is ``(x - mean) / sqrt(variance + eps)``,
-        for ``invert=True`` it is ``x * sqrt(variance + eps) + mean``.
+        Keras' Normalization uses ``std = max(sqrt(variance), backend.epsilon())``
+        and computes:
+          * ``invert=False``: ``(x - mean) / std``
+          * ``invert=True``:  ``mean + x * std``
+
+        Both cases are reshaped here as ``x * scale + offset``.
         """
         layer = self.op
-        mean = self._load_weight('mean')
-        variance = self._load_weight('variance')
-        eps = np.float32(getattr(layer, 'epsilon', None) or 1e-7)
+        mean = self._load_weight('mean').astype(np.float32)
+        variance = self._load_weight('variance').astype(np.float32)
+        eps = keras.backend.epsilon()
+        std = np.maximum(np.sqrt(variance), eps)
         if layer.invert:
-            scale = np.sqrt(np.float32(variance) + eps)
-            offset = mean.astype(np.float32)
-        else:
-            scale = np.float32(1.0) / np.sqrt(np.float32(variance) + eps)
-            offset = -mean.astype(np.float32) * scale
+            return std, mean
+        scale = np.float32(1.0) / std
+        offset = -mean * scale
         return scale, offset
 
     def call(self, inputs: FVArray) -> FVArray:

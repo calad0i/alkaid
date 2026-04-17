@@ -91,6 +91,7 @@ filterwarnings = [
   "ignore: __array__ implementation doesn't accept a copy keyword:DeprecationWarning",
   "ignore: divide by zero encountered in log:RuntimeWarning",
   "ignore: invalid value encountered in log:RuntimeWarning",
+  "ignore: jax.nn.one_hot input should be integer-typed:DeprecationWarning",
 ]
 
 addopts = [
