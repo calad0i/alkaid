@@ -8,6 +8,9 @@ from keras import layers, ops
 from alkaid.converter import trace_model
 from alkaid.trace import FVArray, trace
 
+_TORCH = keras.backend.backend() == 'torch'
+_torch_skip = partial(pytest.mark.skipif, _TORCH)
+
 
 def _qdata(shape, kif, seed=0) -> np.ndarray:
     k, i, f = kif
@@ -266,16 +269,19 @@ class TestBinaryOp:
 class TestReduction:
     @pytest.fixture(
         params=[
-            partial(ops.sum, axis=-1),
-            partial(ops.max, axis=-1),
-            partial(ops.min, axis=-1),
-            partial(ops.mean, axis=1),
-            partial(ops.prod, axis=1),
-            lambda x: ops.all(x < 0, axis=1),
-            lambda x: ops.any(x < 0, axis=1),
-            partial(ops.count_nonzero, axis=1),
+            pytest.param(partial(ops.sum, axis=-1), id='sum'),
+            pytest.param(partial(ops.max, axis=-1), id='max'),
+            pytest.param(partial(ops.min, axis=-1), id='min'),
+            pytest.param(partial(ops.mean, axis=1), id='mean'),
+            pytest.param(partial(ops.prod, axis=1), id='prod'),
+            pytest.param(lambda x: ops.all(x < 0, axis=1), id='all'),
+            pytest.param(lambda x: ops.any(x < 0, axis=1), id='any'),
+            pytest.param(
+                partial(ops.count_nonzero, axis=1),
+                id='count_nonzero',
+                marks=_torch_skip(reason='behavior mismatch: keras/torch transposes count_nonzero across all dims (spurious.T)'),
+            ),
         ],
-        ids=['sum', 'max', 'min', 'mean', 'prod', 'all', 'any', 'count_nonzero'],
     )
     def op(self, request):
         return request.param
@@ -285,7 +291,14 @@ class TestReduction:
 
 
 class TestAverage:
-    @pytest.mark.parametrize('weighted', [False, True], ids=['unweighted', 'weighted'])
+    @pytest.mark.parametrize(
+        'weighted',
+        [
+            False,
+            pytest.param(True, marks=_torch_skip(reason='behavior mismatch: keras/torch ignores axis arg')),
+        ],
+        ids=['unweighted', 'weighted'],
+    )
     def test(self, weighted):
         weights = np.arange(4) + 0.5 if weighted else None
         _run(lambda a: ops.average(a, axis=1, weights=weights), [(4, 8)])
@@ -351,10 +364,13 @@ class TestPad:
     @pytest.fixture(
         params=[
             'constant',
-            'edge',
+            pytest.param('edge', marks=_torch_skip(reason='keras torch backend does not support edge pad')),
             'reflect',
-            'symmetric',
-            'wrap',
+            pytest.param(
+                'symmetric',
+                marks=_torch_skip(reason='behavior mismatch: keras/torch maps symmetric -> replicate (edge)'),
+            ),
+            pytest.param('wrap', marks=_torch_skip(reason='keras torch backend does not support wrap pad')),
         ],
     )
     def op(self, request):
@@ -368,11 +384,18 @@ class TestPad:
 class TestGetItem:
     @pytest.fixture(
         params=[
-            lambda x: x[:, :4],
-            lambda x: x[:, 2::2, ::-1],
-            lambda x: x[:, ::2, 8:2:-2],
+            pytest.param(lambda x: x[:, :4], id='slice'),
+            pytest.param(
+                lambda x: x[:, 2::2, ::-1],
+                id='slice_step',
+                marks=_torch_skip(reason='torch slicing requires step > 0'),
+            ),
+            pytest.param(
+                lambda x: x[:, ::2, 8:2:-2],
+                id='index_array',
+                marks=_torch_skip(reason='torch slicing requires step > 0'),
+            ),
         ],
-        ids=['slice', 'slice_step', 'index_array'],
     )
     def op(self, request):
         return request.param
