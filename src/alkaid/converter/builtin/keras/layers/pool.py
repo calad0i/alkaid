@@ -6,9 +6,9 @@ from keras.src.layers.pooling.base_global_pooling import BaseGlobalPooling
 from keras.src.layers.pooling.base_pooling import BasePooling
 
 from alkaid.trace import FVArray
+from alkaid.trace.ops import extract_patches
 
 from ._base import ReplayOperationBase
-from .conv import symbolic_extract_patches
 
 
 class ReplayPool(ReplayOperationBase):
@@ -55,7 +55,7 @@ class ReplayPool(ReplayOperationBase):
             strides = self.op.strides
             padding = self.op.padding
             ch = inputs.shape[-1]
-            x = symbolic_extract_patches(
+            x = extract_patches(
                 inputs,
                 pool_size,
                 strides,
@@ -66,7 +66,7 @@ class ReplayPool(ReplayOperationBase):
             x = x.reshape(x.shape[:-1] + (-1, ch))  # (batch, out_spa..., kernel_volume, ch)
 
             if padding == 'same':
-                _mask = symbolic_extract_patches(
+                _mask = extract_patches(
                     np.ones(inputs.shape, dtype=np.int32),
                     pool_size,
                     strides,

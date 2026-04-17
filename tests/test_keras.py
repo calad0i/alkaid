@@ -85,8 +85,8 @@ class TestConv:
         params=[
             (layers.Conv1D(4, 3, padding='valid'), (16, 3)),
             (layers.Conv1D(4, 3, padding='same'), (16, 3)),
-            (layers.Conv2D(4, 3, padding='valid'), (8, 8, 3)),
-            (layers.Conv2D(4, 3, padding='same'), (8, 8, 3)),
+            (layers.Conv2D(4, (4, 3), padding='valid'), (8, 8, 3)),
+            (layers.Conv2D(4, (3, 4), padding='same'), (8, 8, 3)),
         ],
         ids=['Conv1D[valid]', 'Conv1D[same]', 'Conv2D[valid]', 'Conv2D[same]'],
     )
@@ -211,9 +211,9 @@ class TestUnaryNonlinear:
 class TestPooling:
     @pytest.fixture(
         params=[
-            (layers.MaxPooling1D(pool_size=2), (8, 4)),
+            (layers.MaxPooling1D(pool_size=3, padding='same'), (8, 4)),
             (layers.AveragePooling1D(pool_size=2), (8, 4)),
-            (layers.MaxPooling2D(pool_size=2), (8, 8, 4)),
+            (layers.MaxPooling2D(pool_size=(2, 3), padding='same'), (8, 8, 4)),
             (layers.AveragePooling2D(pool_size=2), (8, 8, 4)),
             (layers.GlobalMaxPooling1D(), (4, 8)),
             (layers.GlobalAveragePooling1D(), (4, 8)),
