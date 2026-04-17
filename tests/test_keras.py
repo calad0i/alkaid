@@ -156,6 +156,7 @@ class TestActivation:
             keras.activations.hard_swish,
             keras.activations.log_sigmoid,
             keras.activations.hard_tanh,
+            keras.activations.relu6,
             custom,
         ]
     )

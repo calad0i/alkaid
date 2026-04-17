@@ -93,6 +93,7 @@ keras_numpy_unary_map = {
     'hard_swish': _wrap_apply(_hard_silu),
     'log_sigmoid': _log_sigmoid,
     'hard_tanh': _hard_tanh,
+    'relu6': lambda x: np.clip(x, 0, 6),
 }
 
 
