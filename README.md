@@ -2,7 +2,6 @@
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/calad0i/alkaid/unit-test.yml?label=test)](https://github.com/calad0i/alkaid/actions/workflows/unit-test.yml)
 [![Documentation](https://img.shields.io/github/actions/workflow/status/calad0i/alkaid/sphinx-build.yml?label=doc)](https://calad0i.github.io/alkaid/)
-<!-- [![PyPI version](https://img.shields.io/pypi/v/alkaid)](https://pypi.org/project/alkaid/) -->
 [![Cov](https://img.shields.io/codecov/c/github/calad0i/alkaid)](https://codecov.io/gh/calad0i/alkaid)
 
 alkaid is a light-weight high-level synthesis (HLS) compiler for generating low-latency, static-dataflow kernels for FPGAs. The main motivation of alkaid is to provide a simple and efficient way for machine learning practitioners requiring ultra-low latency to deploy their models on FPGAs quickly and easily, similar to hls4ml but with a much simpler design and better performance, both for the generated kernels and for the compilation process.
