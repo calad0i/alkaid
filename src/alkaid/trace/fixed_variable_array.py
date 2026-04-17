@@ -376,17 +376,7 @@ class FVArray(np.ndarray):
         _arr = np.empty(shape, dtype=object)
         for i in range(_arr.size):
             _arr.ravel()[i] = FVariableInput(latency, hwconf)
-        return cls.__new__(cls, _arr, solver_options, hwconf=hwconf)
-
-    def __eq__(self, other):
-        a, b = np.broadcast_arrays(self, other)
-        r = np.array([[v1._eq(v2) for v1, v2 in zip(a.ravel(), b.ravel())]]).reshape(a.shape)
-        return FVArray(r, self.solver_options, hwconf=self.hwconf)
-
-    def __ne__(self, other):
-        a, b = np.broadcast_arrays(self, other)
-        r = np.array([[v1._ne(v2) for v1, v2 in zip(a.ravel(), b.ravel())]]).reshape(a.shape)
-        return FVArray(r, self.solver_options, hwconf=self.hwconf)
+        return cls(_arr, solver_options, hwconf=hwconf)
 
 
 class FVArrayInput(FVArray):
@@ -466,6 +456,10 @@ class RetardedFVArray(FVArray):
         raise RuntimeError(
             f'RetardedFVArray only supports quantization or further unary mapping operations. Got array function {func}.'
         )
+
+    def __pow__(self, other, modulo=None):
+        assert modulo is None, 'Modulo exponentiation is not supported for RetardedFVArray.'
+        return self.apply(lambda x: x**other)
 
     def apply(self, fn: Callable[[NDArray], NDArray]) -> 'RetardedFVArray':
         return RetardedFVArray(
@@ -554,15 +548,11 @@ def _np_amin(*args, **kwargs):
 
 @_array_fn(np.argmax)
 def _np_argmax(a, axis=None, out=None, keepdims=False):
-    if not isinstance(a, FVArray):
-        return np.argmax(to_raw_arr(a), axis=axis, out=out, keepdims=keepdims)
     return argreduce(a, axis, keepdims, minimize=False)
 
 
 @_array_fn(np.argmin)
 def _np_argmin(a, axis=None, out=None, keepdims=False):
-    if not isinstance(a, FVArray):
-        return np.argmin(to_raw_arr(a), axis=axis, out=out, keepdims=keepdims)
     return argreduce(a, axis, keepdims, minimize=True)
 
 
@@ -796,23 +786,7 @@ def _ufunc_less_equal(arr: FVArray, ufunc, *inputs, **kwargs):
     return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
-@_ufunc(np.logical_and)
-def _ufunc_logical_and(arr: FVArray, ufunc, *inputs, **kwargs):
-    a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
-    shape = a.shape
-    r = np.array([av & bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
-
-
-@_ufunc(np.logical_or)
-def _ufunc_logical_or(arr: FVArray, ufunc, *inputs, **kwargs):
-    a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
-    shape = a.shape
-    r = np.array([av | bv for av, bv in zip(a.ravel(), b.ravel())])
-    return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
-
-
-@_ufunc(np.bitwise_and)
+@_ufunc(np.bitwise_and, np.logical_and)
 def _ufunc_bitwise_and(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
@@ -820,7 +794,7 @@ def _ufunc_bitwise_and(arr: FVArray, ufunc, *inputs, **kwargs):
     return FVArray(r.reshape(shape), arr.solver_options, hwconf=arr.hwconf)
 
 
-@_ufunc(np.bitwise_or)
+@_ufunc(np.bitwise_or, np.logical_or)
 def _ufunc_bitwise_or(arr: FVArray, ufunc, *inputs, **kwargs):
     a, b = np.broadcast_arrays(to_raw_arr(inputs[0]), to_raw_arr(inputs[1]))
     shape = a.shape
