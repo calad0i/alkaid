@@ -342,7 +342,7 @@ class RTLModel:
         env['VM_PREFIX'] = f'{self._prj_name}_wrapper'
         env['STAMP'] = self._uuid
         env['EXTRA_CXXFLAGS'] = '-fopenmp' if openmp else ''
-        env['VERILATOR_FLAGS'] = '-Wall' if self._flavor == 'verilog' else ''
+        env['VERILATOR_FLAGS'] = '-Wall' if self._flavor == 'verilog' else '-Wno-ALWNEVER'
         if _env is not None:
             env.update(_env)
         if nproc is not None:
