@@ -36,7 +36,7 @@ ARR_or_tuple_ARR = tuple[FVArray, ...] | FVArray
 
 
 class ReplayOperationBase(metaclass=HandlerRegMeta):
-    handles: tuple[type, ...] = ()
+    handles: tuple[type, ...] | type = ()
     __activation_handled__ = False
 
     def _load_weight(self, name: str) -> np.ndarray:

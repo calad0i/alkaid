@@ -6,7 +6,7 @@ import pytest
 from keras import layers, ops
 
 from alkaid.converter import trace_model
-from alkaid.trace import trace
+from alkaid.trace import FVArray, trace
 
 
 def _qdata(shape, kif, seed=0) -> np.ndarray:
@@ -32,10 +32,13 @@ def _perturb_weights(model, fbits=2, seed=42):
     model.set_weights(new_weights)
 
 
-def _run(op, shapes, kif=(1, 4, 4), n=65536, perturb_weights=True, hook_model=None, hook_data=None):
+def _run(op, shapes, kif=(1, 4, 4), n=65536, perturb_weights=True, hook_model=None, hook_data=None, wrap_model=True, **kwargs):
     inps = [layers.Input(shape=s) for s in shapes]
     out = op(inps[0]) if len(inps) == 1 else op(inps)
-    model = keras.Model(inps[0] if len(inps) == 1 else inps, out)
+    if wrap_model:
+        model = keras.Model(inps[0] if len(inps) == 1 else inps, out)
+    else:
+        model = op
     if perturb_weights:
         _perturb_weights(model)
     if hook_model is not None:
@@ -43,7 +46,7 @@ def _run(op, shapes, kif=(1, 4, 4), n=65536, perturb_weights=True, hook_model=No
     datas = [_qdata((n,) + s, kif, seed=i) for i, s in enumerate(shapes)]
     if hook_data is not None:
         datas = hook_data(datas)
-    trace_inp, trace_out = trace_model(model, inputs_kif=kif)
+    trace_inp, trace_out = trace_model(model, inputs_kif=kif, **kwargs)
     comb = trace(trace_inp, trace_out)
     data_keras = datas[0] if len(datas) == 1 else datas
     expected: np.ndarray = ops.convert_to_numpy(model(data_keras))  # type: ignore
@@ -228,8 +231,9 @@ class TestReshape:
         params=[
             layers.Flatten(),
             layers.Reshape((8, 4)),
+            partial(ops.reshape, newshape=(-1, 4)),
         ],
-        ids=['Flatten', 'Reshape'],
+        ids=['Flatten', 'Reshape', 'ops.reshape'],
     )
     def op(self, request):
         return request.param
@@ -238,31 +242,19 @@ class TestReshape:
         _run(op, [(4, 8)])
 
 
-class TestMerge:
-    @pytest.fixture(
-        params=[
-            layers.Add(),
-            layers.Concatenate(),
-        ],
-        ids=['Add', 'Concatenate'],
-    )
-    def op(self, request):
-        return request.param
-
-    def test(self, op):
-        _run(op, [(8,), (8,)])
-
-
 class TestBinaryOp:
     @pytest.fixture(
         params=[
             lambda xs: ops.add(*xs),
             lambda xs: ops.subtract(*xs),
             lambda xs: ops.multiply(*xs),
+            lambda xs: ops.round(10 / ops.maximum(xs[0], 0.125)),
+            lambda xs: ops.round(xs[0] / 4),
             lambda xs: ops.maximum(*xs),
             lambda xs: ops.minimum(*xs),
+            lambda xs: ops.concatenate(xs, axis=-1),
         ],
-        ids=['add', 'sub', 'mul', 'max', 'min'],
+        ids=['add', 'sub', 'mul', 'div_const', 'div', 'max', 'min', 'concat'],
     )
     def op(self, request):
         return request.param
@@ -277,14 +269,26 @@ class TestReduction:
             partial(ops.sum, axis=-1),
             partial(ops.max, axis=-1),
             partial(ops.min, axis=-1),
+            partial(ops.mean, axis=1),
+            partial(ops.prod, axis=1),
+            lambda x: ops.all(x < 0, axis=1),
+            lambda x: ops.any(x < 0, axis=1),
+            partial(ops.count_nonzero, axis=1),
         ],
-        ids=['sum', 'max', 'min'],
+        ids=['sum', 'max', 'min', 'mean', 'prod', 'all', 'any', 'count_nonzero'],
     )
     def op(self, request):
         return request.param
 
     def test(self, op):
-        _run(op, [(4, 8)])
+        _run(op, [(4, 8)], kif=(1, 2, 2))
+
+
+class TestAverage:
+    @pytest.mark.parametrize('weighted', [False, True], ids=['unweighted', 'weighted'])
+    def test(self, weighted):
+        weights = np.arange(4) + 0.5 if weighted else None
+        _run(lambda a: ops.average(a, axis=1, weights=weights), [(4, 8)])
 
 
 class TestUnaryOp:
@@ -390,3 +394,122 @@ class TestRepeat:
 
     def test(self, op):
         _run(op, [(8,)], kif=(1, 2, 4))
+
+
+class TestNested:
+    @pytest.fixture
+    def model(self):
+        inp = layers.Input(shape=(8,))
+        out = layers.Dense(8, activation='relu')(inp)
+        model0 = keras.Model(inp, out)
+        inp1 = layers.Input(shape=(8,))
+        out1 = model0(inp1)
+        out1 = model0(out1)
+        model1 = keras.Model(inp1, out1)
+        return model1
+
+    def test(self, model):
+        _run(lambda x: model(x), [(8,)], verbose=True)
+
+
+class TestUnknownShape:
+    @pytest.fixture
+    def model(self):
+        inp = keras.Input(shape=(None, None))
+        out = keras.layers.MaxPool1D(2)(inp)
+        model = keras.Model(inp, out)
+        return model
+
+    @pytest.mark.parametrize('inp_shape', [(8, 2), (12, 3)])
+    def test(self, model, inp_shape):
+        kif = (1, 4, 4)
+        inputs = FVArray.new((1,) + inp_shape).quantize(*kif).as_new()
+        _run(model, [inp_shape], kif=(1, 2, 4), wrap_model=False, inputs=inputs)
+
+
+class TestSortLike:
+    @pytest.fixture(
+        params=[
+            partial(ops.argmax, axis=-1),
+            partial(ops.argmin, axis=-1),
+            partial(ops.amax, axis=-1),
+            partial(ops.amin, axis=-1),
+            partial(ops.sort, axis=-1),
+        ],
+    )
+    def op(self, request):
+        return request.param
+
+    def test(self, op):
+        _run(op, [(8,)])
+
+
+class TestMoveAxis:
+    def test(self):
+        _run(lambda x: ops.moveaxis(x, 1, 2), [(8, 4, 2)])
+
+
+class TestTranspose:
+    def test(self):
+        _run(lambda x: ops.transpose(x, (0, 2, 1)), [(8, 4)])
+
+
+class TestMerge:
+    @pytest.fixture(
+        params=[
+            layers.Add(),
+            layers.Concatenate(),
+            layers.Multiply(),
+            layers.Subtract(),
+            layers.Maximum(),
+            layers.Minimum(),
+            layers.Average(),
+        ],
+        ids=['Add', 'Concatenate', 'Multiply', 'Subtract', 'Maximum', 'Minimum', 'Average'],
+    )
+    def op(self, request):
+        return request.param
+
+    def test(self, op):
+        shapes = [(3, 4), (3, 1), (1, 4)]
+        if isinstance(op, layers.Concatenate):
+            shapes = [(3, 4), (3, 4)]
+        elif isinstance(op, layers.Subtract):
+            shapes = [(3, 4), (3, 1)]
+        elif isinstance(op, layers.Average):
+            shapes = [(3, 4), (3, 1), (1, 4), (1, 1)]
+        _run(op, shapes, kif=(1, 2, 3))
+
+
+class TestExtractPatches:
+    @pytest.fixture(
+        params=[
+            partial(ops.image.extract_patches, size=(2, 2), strides=(1, 1), padding='valid'),
+            partial(ops.image.extract_patches, size=(2, 2), strides=(1, 1), padding='same'),
+            partial(ops.image.extract_patches, size=(2, 1), strides=(1, 2), padding='valid'),
+            partial(ops.image.extract_patches, size=(1, 3), strides=(2, 2), padding='same'),
+        ],
+    )
+    def op(self, request):
+        return request.param
+
+    def test(self, op):
+        _run(op, [(3, 4, 5)])
+
+
+class TestCmp:
+    @pytest.fixture(
+        params=[
+            lambda xs: ops.equal(*xs),
+            lambda xs: ops.greater(*xs),
+            lambda xs: ops.greater_equal(*xs),
+            lambda xs: ops.less(*xs),
+            lambda xs: ops.less_equal(*xs),
+        ],
+        ids=['equal', 'greater', 'greater_equal', 'less', 'less_equal'],
+    )
+    def op(self, request):
+        return request.param
+
+    def test(self, op):
+        _run(op, [(8,), (8,)], kif=(1, 2, 4))

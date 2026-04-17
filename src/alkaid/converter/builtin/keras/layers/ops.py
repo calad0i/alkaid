@@ -8,37 +8,47 @@ from keras.src.ops.numpy import (
     Abs,
     Absolute,
     Add,
+    All,
     Amax,
     Amin,
+    Any,
     Arccos,
     Arcsin,
     Arcsinh,
     Arctanh,
     Argmax,
     Argmin,
-    Argsort,
+    Average,
     Ceil,
     Clip,
     Concatenate,
     Cos,
     Cosh,
+    CountNonzero,
     Divide,
     Dot,
     Einsum,
+    Equal,
     Exp,
     Expm1,
     Floor,
     GetItem,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
     Log,
     Log1p,
     Matmul,
     Max,
     Maximum,
+    Mean,
     Min,
     Minimum,
     Moveaxis,
     Multiply,
     Pad,
+    Prod,
     Ravel,
     Repeat,
     Reshape,
@@ -73,34 +83,40 @@ class ReplayReshape(ReplayOperationBase):
         elif isinstance(self.op, keras.layers.Reshape):
             return inputs.reshape(self.op.target_shape)
         elif isinstance(self.op, Reshape):
-            return inputs.reshape(self.op.newshape[1:])
+            return inputs.reshape(self.op.newshape)
         else:
             raise TypeError(f'Unsupported layer type: {type(self.op)}')
 
 
 class ReplayMerge(ReplayOperationBase):
-    handles = (keras.layers.Add, keras.layers.Concatenate)
+    handles = (
+        keras.layers.Add,
+        keras.layers.Concatenate,
+        keras.layers.Multiply,
+        keras.layers.Subtract,
+        keras.layers.Maximum,
+        keras.layers.Minimum,
+        keras.layers.Average,
+    )
 
     def call(self, inputs: tuple[FVArray, ...]) -> FVArray:
         op = self.op
         name = op.__class__.__name__
-        if name.startswith('Q'):
-            name = name[1:]
         _inputs: FVArray = np.stack(np.broadcast_arrays(*inputs), axis=0)  # type: ignore
         match name:
             case 'Add':
-                return np.sum(_inputs, axis=0)  # type: ignore
-            case 'AveragePow2':
-                return np.sum(_inputs, axis=0) * op._scale  # type: ignore
+                return np.sum(_inputs, axis=0)
+            case 'Average':
+                return np.mean(_inputs, axis=0)
             case 'Subtract':
                 assert len(_inputs) == 2, 'Subtract operation requires exactly two inputs'
-                return _inputs[0] - _inputs[1]  # type: ignore
+                return _inputs[0] - _inputs[1]
             case 'Multiply':
-                return np.prod(_inputs, axis=0)  # type: ignore
+                return np.prod(_inputs, axis=0)
             case 'Maximum':
-                return np.amax(_inputs, axis=0)  # type: ignore
+                return np.amax(_inputs, axis=0)
             case 'Minimum':
-                return np.amin(_inputs, axis=0)  # type: ignore
+                return np.amin(_inputs, axis=0)
             case 'Concatenate':
                 return np.concatenate(_inputs, axis=op.axis)  # type: ignore
 
@@ -112,35 +128,53 @@ class ReplayRepeatVector(ReplayOperationBase):
     handles = (keras.layers.RepeatVector,)
 
     def call(self, inputs: FVArray) -> FVArray:
-        layer: keras.layers.RepeatVector = self.op
-        if layer.n == 1:
-            return inputs
-        return np.repeat(inputs, layer.n, axis=0)  # type: ignore
+        op: keras.layers.RepeatVector = self.op
+        return np.repeat(inputs, op.n, axis=0)  # type: ignore
 
 
 class ReplayGetItem(ReplayOperationBase):
     handles = (GetItem,)
 
     def call(self, x: FVArray, key) -> FVArray:
-        if isinstance(key, list):
-            key = tuple(key)
-        return x[key]  # type: ignore
+        return x[key]
 
 
 class ReplayReduction(ReplayOperationBase):
-    handles = (Sum, Max, Min)
+    handles = (Sum, Max, Min, CountNonzero, All, Any, Prod, Mean)
 
-    def call(self, x: FVArray, axis=None, keepdims=False):
-        if isinstance(self.op, Sum):
-            op = np.sum
-        elif isinstance(self.op, Max):
-            op = np.amax
-        elif isinstance(self.op, Min):
-            op = np.amin
+    def call(self, x: FVArray, axis=None, keepdims=False) -> FVArray:
+        match self.op.__class__.__name__:
+            case 'Sum':
+                op = np.sum
+            case 'Max':
+                op = np.amax
+            case 'Min':
+                op = np.amin
+            case 'CountNonzero':
+                op = np.count_nonzero
+            case 'All':
+                op = np.all
+            case 'Any':
+                op = np.any
+            case 'Prod':
+                op = np.prod
+            case 'Mean':
+                op = np.mean
+            case _:
+                raise TypeError(f'Unsupported reduction operation: {type(self.op)}')
+
         # axis/keepdims are stored as op attributes, not passed as kwargs
         axis = self.op.axis if hasattr(self.op, 'axis') else axis
         keepdims = self.op.keepdims if hasattr(self.op, 'keepdims') else keepdims
         return op(x, axis=axis, keepdims=keepdims)  # type: ignore
+
+
+class ReplayAverage(ReplayOperationBase):
+    handles = Average
+
+    def call(self, x, weights=None) -> FVArray:
+        axis = self.op.axis
+        return np.average(x, axis=axis, weights=weights)  # type: ignore
 
 
 class ReplayArithmetic(ReplayOperationBase):
@@ -282,22 +316,10 @@ class ReplayCeil(ReplayOperationBase):
 
 
 class ReplaySortLike(ReplayOperationBase):
-    """Handlers for argsort/argmax/argmin/amax/amin/sort — dispatch to numpy by
-    op-class name and pass through axis/keepdims attributes where present."""
-
-    _OP_FN = {
-        'Argsort': np.argsort,
-        'Argmax': np.argmax,
-        'Argmin': np.argmin,
-        'Amax': np.amax,
-        'Amin': np.amin,
-        'Sort': np.sort,
-    }
-
-    handles = (Argsort, Argmax, Argmin, Amax, Amin, Sort)
+    handles = (Argmax, Argmin, Amax, Amin, Sort)
 
     def call(self, x: FVArray) -> FVArray:
-        fn = self._OP_FN[self.op.__class__.__name__]
+        fn = getattr(np, self.op.__class__.__name__.lower())
         kwargs = {}
         if hasattr(self.op, 'axis'):
             kwargs['axis'] = self.op.axis
@@ -351,3 +373,23 @@ class ReplayPad(ReplayOperationBase):
             return np.pad(x, pad_width, mode=mode, constant_values=constant_values)  # type: ignore
         else:
             return np.pad(x, pad_width, mode=mode)  # type: ignore
+
+
+class ReplayCmp(ReplayOperationBase):
+    handles = (Equal, Greater, GreaterEqual, Less, LessEqual)
+
+    def call(self, x1: FVArray, x2: FVArray) -> FVArray:
+        name = self.op.__class__.__name__
+        match name:
+            case 'Equal':
+                return x1 == x2
+            case 'Greater':
+                return x1 > x2
+            case 'GreaterEqual':
+                return x1 >= x2
+            case 'Less':
+                return x1 < x2
+            case 'LessEqual':
+                return x1 <= x2
+            case _:
+                raise TypeError(f'Unsupported comparison operation: {type(self.op)}')

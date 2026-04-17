@@ -43,6 +43,8 @@ optional-dependencies.docs = [
   "sphinx-rtd-theme",
 ]
 optional-dependencies.tests = [
+  "jax",
+  "keras",
   "pytest",
   "pytest-cov",
   "pytest-env",
