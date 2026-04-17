@@ -321,6 +321,23 @@ class TestContraction:
         _run(op, [(4, 3), (3, 2)], kif=(1, 2, 4))
 
 
+class TestDot:
+    @pytest.fixture(
+        params=[
+            (lambda xs: layers.Dot(axes=-1)(xs), [(4, 3), (3,)]),
+            (lambda xs: layers.Dot(axes=1)(xs), [(4, 3), (4, 5)]),
+            (lambda xs: layers.Dot(axes=(1, 2))(xs), [(4, 3), (5, 4)]),
+        ],
+        ids=['axes=-1', 'axes=1', 'axes=(1,2)'],
+    )
+    def case(self, request):
+        return request.param
+
+    def test(self, case):
+        op, shapes = case
+        _run(op, shapes, kif=(1, 2, 4))
+
+
 class TestNoOp:
     def test(self):
         _run(layers.Dropout(0.5), [(8,)])

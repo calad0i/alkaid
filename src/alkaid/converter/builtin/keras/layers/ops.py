@@ -214,26 +214,25 @@ class ReplayEinsum(ReplayOperationBase):
     def call(self, *_inputs: tuple[FVArray, FVArray] | FVArray) -> FVArray:
         op = self.op
         inputs: tuple[FVArray, FVArray]
-        if isinstance(_inputs[0], tuple):
-            assert len(_inputs) == 1, 'Einsum with multiple input tuples is not supported'
-            inputs = _inputs[0]
+        if len(_inputs) == 1 and isinstance(_inputs[0], (tuple, list)):
+            inputs = tuple(_inputs[0])  # type: ignore
         else:
             inputs = _inputs  # type: ignore
         assert len(inputs) == 2, 'Only (Q)Einsum operations with exactly two inputs are supported'
 
         if isinstance(op, Einsum):
             eq = op.subscripts
-        else:  # Dot
+        else:  # keras.layers.Dot
             dim0, dim1 = inputs[0].ndim, inputs[1].ndim
-            letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'[0 : dim0 + dim1]
-            sub0, sub1 = letters[:dim0], letters[dim0 : dim0 + dim1]
+            letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'[: dim0 + dim1 - 1]
+            sub0 = letters[:dim0]
+            _sub1 = list(sub0[0] + letters[dim0:])  # share batch idx
             axes = list(op.axes) if not isinstance(op.axes, int) else [op.axes, op.axes]
-            idx0, idx1 = axes[0] if axes[0] >= 0 else axes[0] % dim0, axes[1] if axes[1] >= 0 else axes[1] % dim1
-            sub1 = sub1[:idx1] + sub0[idx0] + sub1[idx1 + 1 :]
-            sub_out = list(sub0 + sub1)
-            sub_out.remove(sub0[idx0])
-            sub_out.remove(sub0[idx0])
-            sub_out = ''.join(sub_out)
+            idx0, idx1 = axes[0] % dim0, axes[1] % dim1
+            contracted = sub0[idx0]
+            _sub1[idx1] = contracted
+            sub1 = ''.join(_sub1)
+            sub_out = ''.join(c for c in sub0 if c != contracted) + ''.join(c for c in sub1[1:] if c != contracted)
             eq = f'{sub0},{sub1}->{sub_out}'
         return einsum(eq, inputs[0], inputs[1])  # type: ignore
 
@@ -282,46 +281,29 @@ class ReplayCeil(ReplayOperationBase):
         return np.ceil(x)  # type: ignore
 
 
-class ReplayArgsort(ReplayOperationBase):
-    handles = (Argsort,)
+class ReplaySortLike(ReplayOperationBase):
+    """Handlers for argsort/argmax/argmin/amax/amin/sort — dispatch to numpy by
+    op-class name and pass through axis/keepdims attributes where present."""
+
+    _OP_FN = {
+        'Argsort': np.argsort,
+        'Argmax': np.argmax,
+        'Argmin': np.argmin,
+        'Amax': np.amax,
+        'Amin': np.amin,
+        'Sort': np.sort,
+    }
+
+    handles = (Argsort, Argmax, Argmin, Amax, Amin, Sort)
 
     def call(self, x: FVArray) -> FVArray:
-        return np.argsort(x)  # type: ignore
-
-
-class ReplayArgmax(ReplayOperationBase):
-    handles = (Argmax,)
-
-    def call(self, x: FVArray) -> FVArray:
-        return np.argmax(x)  # type: ignore
-
-
-class ReplayArgmin(ReplayOperationBase):
-    handles = (Argmin,)
-
-    def call(self, x: FVArray) -> FVArray:
-        return np.argmin(x)  # type: ignore
-
-
-class ReplayAmax(ReplayOperationBase):
-    handles = (Amax,)
-
-    def call(self, x: FVArray) -> FVArray:
-        return np.amax(x)  # type: ignore
-
-
-class ReplayAmin(ReplayOperationBase):
-    handles = (Amin,)
-
-    def call(self, x: FVArray) -> FVArray:
-        return np.amin(x)  # type: ignore
-
-
-class ReplaySort(ReplayOperationBase):
-    handles = (Sort,)
-
-    def call(self, x: FVArray) -> FVArray:
-        return np.sort(x)  # type: ignore
+        fn = self._OP_FN[self.op.__class__.__name__]
+        kwargs = {}
+        if hasattr(self.op, 'axis'):
+            kwargs['axis'] = self.op.axis
+        if hasattr(self.op, 'keepdims'):
+            kwargs['keepdims'] = self.op.keepdims
+        return fn(x, **kwargs)  # type: ignore
 
 
 class ReplayUnary(ReplayOperationBase):
