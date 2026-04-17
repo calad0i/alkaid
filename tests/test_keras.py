@@ -587,14 +587,17 @@ class TestUpSampling:
         _run(op, [shape], kif=(1, 2, 2))
 
 
+_CT_SAME_SKIP = _torch_skip(reason='keras/torch backend conv-transpose w/ "same" has different behavior')
+
+
 class TestConvTranspose:
     @pytest.fixture(
         params=[
-            (layers.Conv1DTranspose(4, 3, strides=2, padding='same'), (8, 3)),
+            pytest.param((layers.Conv1DTranspose(4, 3, strides=2, padding='same'), (8, 3)), marks=_CT_SAME_SKIP),
             (layers.Conv1DTranspose(4, 3, strides=2, padding='valid'), (8, 3)),
-            (layers.Conv2DTranspose(4, 3, strides=(2, 2), padding='same'), (4, 4, 3)),
+            pytest.param((layers.Conv2DTranspose(4, 3, strides=(2, 2), padding='same'), (4, 4, 3)), marks=_CT_SAME_SKIP),
             (layers.Conv2DTranspose(4, 3, strides=(1, 1), padding='valid'), (4, 4, 3)),
-            (layers.Conv3DTranspose(4, 3, strides=2, padding='same'), (2, 2, 2, 3)),
+            pytest.param((layers.Conv3DTranspose(4, 3, strides=2, padding='same'), (2, 2, 2, 3)), marks=_CT_SAME_SKIP),
         ],
         ids=['1DT[same]', '1DT[valid]', '2DT[same]', '2DT[valid]', '3DT[same]'],
     )
