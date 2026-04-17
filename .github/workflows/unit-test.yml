@@ -26,6 +26,15 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
 
+      - name: Install verilator
+        uses: veryl-lang/setup-verilator@v1
+
+      - name: Install ghdl
+        uses: ghdl/setup-ghdl@v1
+        with:
+          version: latest
+          backend: mcode
+
       - name: Install dependencies
         run: |
           cd $GITHUB_WORKSPACE
