@@ -2,6 +2,10 @@
 
 Pure numpy, works on both ``np.ndarray`` and ``alkaid.trace.FVArray``. Used by
 both the keras and torch converter wrappers.
+
+``extract_patches`` and ``extract_patches_transposed`` share everything except
+the per-dim index formula and the output spatial size; the common tail is in
+``_gather_patches``.
 """
 
 from collections.abc import Sequence
@@ -51,8 +55,55 @@ def _resolve_pad_per_dim(
     return tuple((int(p), int(p)) if isinstance(p, int) else (int(p[0]), int(p[1])) for p in padding)
 
 
-def _out_size(in_size: int, k: int, s: int, d: int, pl: int, pr: int) -> int:
-    return (in_size + pl + pr - (k - 1) * d - 1) // s + 1
+def _gather_patches(
+    images: T,
+    spa_in: tuple[int, ...],
+    out_spa: tuple[int, ...],
+    size_t: tuple[int, ...],
+    idx_1d_per_dim: list[np.ndarray],
+    mask_1d_per_dim: list[np.ndarray],
+    pad_value: float,
+) -> T:
+    """Common back-half: broadcast per-dim indices, gather, mask, reshape.
+
+    ``idx_1d_per_dim[i]`` and ``mask_1d_per_dim[i]`` are both ``(out_spa[i], size_t[i])``.
+    """
+    rank = len(spa_in)
+    idx_per_dim: list[np.ndarray] = []
+    mask_per_dim: list[np.ndarray] = []
+    for i in range(rank):
+        shape = [1] * (2 * rank)
+        shape[i] = out_spa[i]
+        shape[rank + i] = size_t[i]
+        idx_per_dim.append(idx_1d_per_dim[i].reshape(shape))
+        mask_per_dim.append(mask_1d_per_dim[i].reshape(shape))
+
+    mask: np.ndarray = mask_per_dim[0]
+    for m in mask_per_dim[1:]:
+        mask = mask & m
+
+    linear_idx = np.zeros_like(idx_per_dim[0])
+    stride_acc = 1
+    for i in reversed(range(rank)):
+        linear_idx = linear_idx + idx_per_dim[i] * stride_acc
+        stride_acc *= spa_in[i]
+
+    batch = images.shape[0]
+    ch = images.shape[-1]
+    flat = images.reshape((batch, int(np.prod(spa_in)), ch))
+    gathered = np.take(flat, linear_idx, axis=1)  # (batch, *out_spa, *size, ch)
+
+    from ..fixed_variable_array import FVArray
+
+    mask_b: np.ndarray = np.broadcast_to(mask[..., None], gathered.shape[1:])
+    if isinstance(gathered, FVArray):
+        _vars = np.asarray(gathered)
+        _vars = np.where(mask_b, _vars, pad_value)
+        gathered = FVArray(_vars, gathered.solver_options)
+    else:
+        gathered = np.where(mask_b, gathered, pad_value)  # type: ignore
+
+    return gathered.reshape((batch,) + out_spa + (-1,))  # type: ignore
 
 
 def extract_patches(
@@ -64,7 +115,11 @@ def extract_patches(
     data_format: str = 'channels_last',
     pad_value: float = 0,
 ) -> T:
-    """Sliding-window patch extraction.
+    """Forward sliding-window patch extraction.
+
+    For each output position ``o`` and kernel index ``k``, gathers
+    ``images[..., o*stride + k*dilation - pad_before, ...]``, masking positions
+    that fall outside the original spatial range.
 
     Parameters
     ----------
@@ -78,12 +133,12 @@ def extract_patches(
     dilation_rate
         Per-spatial-dim dilation.
     padding
-        One of: ``'valid'``, ``'same'`` (tf/keras ``ceil(in/stride)`` semantics),
+        One of: ``'valid'``, ``'same'`` (keras ``ceil(in/stride)`` semantics),
         a single ``int`` (symmetric on every dim), a sequence of ints (symmetric
         per dim), or a sequence of ``(before, after)`` pairs.
     data_format
-        ``'channels_last'`` or ``'channels_first'``. Output is always channels-last
-        form: ``(batch, *out_spatial, prod(size) * ch)``.
+        ``'channels_last'`` or ``'channels_first'``. Output is always
+        channels-last form: ``(batch, *out_spatial, prod(size) * ch)``.
     pad_value
         Fill value for out-of-bounds positions.
     """
@@ -99,47 +154,65 @@ def extract_patches(
     spa_in = tuple(images.shape[1:-1])
     pads = _resolve_pad_per_dim(padding, spa_in, size_t, stride_t, dilation_t)
 
-    ch = images.shape[-1]
-    batch = images.shape[0]
+    out_spa = tuple(
+        (spa_in[i] + pads[i][0] + pads[i][1] - (size_t[i] - 1) * dilation_t[i] - 1) // stride_t[i] + 1 for i in range(rank)
+    )
 
-    out_spa = tuple(_out_size(spa_in[i], size_t[i], stride_t[i], dilation_t[i], pads[i][0], pads[i][1]) for i in range(rank))
-
-    idx_per_dim: list[np.ndarray] = []
-    mask_per_dim: list[np.ndarray] = []
+    idx_1d_per_dim: list[np.ndarray] = []
+    mask_1d_per_dim: list[np.ndarray] = []
     for i in range(rank):
         o = np.arange(out_spa[i])[:, None] * stride_t[i]
         k = np.arange(size_t[i])[None, :] * dilation_t[i]
-        idx_1d = o + k - pads[i][0]
-        mask_1d = (idx_1d >= 0) & (idx_1d < spa_in[i])
-        idx_1d = np.clip(idx_1d, 0, spa_in[i] - 1)
-        shape = [1] * (2 * rank)
-        shape[i] = out_spa[i]
-        shape[rank + i] = size_t[i]
-        idx_per_dim.append(idx_1d.reshape(shape))
-        mask_per_dim.append(mask_1d.reshape(shape))
+        idx = o + k - pads[i][0]
+        mask = (idx >= 0) & (idx < spa_in[i])
+        idx_1d_per_dim.append(np.clip(idx, 0, spa_in[i] - 1))
+        mask_1d_per_dim.append(mask)
 
-    mask: np.ndarray = mask_per_dim[0]
-    for m in mask_per_dim[1:]:
-        mask = mask & m
+    return _gather_patches(images, spa_in, out_spa, size_t, idx_1d_per_dim, mask_1d_per_dim, pad_value)
 
-    linear_idx = np.zeros_like(idx_per_dim[0])
-    stride_acc = 1
-    for i in reversed(range(rank)):
-        linear_idx = linear_idx + idx_per_dim[i] * stride_acc
-        stride_acc *= spa_in[i]
 
-    flat_spa = int(np.prod(spa_in))
-    flat = images.reshape((batch, flat_spa, ch))
-    gathered = np.take(flat, linear_idx, axis=1)  # (batch, *out_spa, *size, ch)
+def extract_patches_transposed(
+    images: T,
+    size: int | Sequence[int],
+    strides: int | Sequence[int] = 1,
+    dilation_rate: int | Sequence[int] = 1,
+    padding: Padding = 0,
+    output_padding: int | Sequence[int] = 0,
+    data_format: str = 'channels_last',
+    pad_value: float = 0,
+) -> T:
+    """Gather-based patch extraction for transposed convolution.
 
-    from ..fixed_variable_array import FVArray
+    Output spatial size per dim:
+        ``(in - 1) * stride - pad_before - pad_after + dilation * (size - 1) + output_padding + 1``.
+    """
+    if data_format == 'channels_first':
+        images = np.moveaxis(images, 1, -1)  # type: ignore
+    elif data_format != 'channels_last':
+        raise ValueError(f'unknown data_format: {data_format!r}')
 
-    mask_b: np.ndarray = np.broadcast_to(mask[..., None], gathered.shape[1:])
-    if isinstance(gathered, FVArray):
-        _vars = np.asarray(gathered)
-        _vars = np.where(mask_b, _vars, pad_value)
-        gathered = FVArray(_vars, gathered.solver_options)
-    else:
-        gathered = np.where(mask_b, gathered, pad_value)  # type: ignore
+    rank = images.ndim - 2
+    size_t = _as_tuple(size, rank)
+    stride_t = _as_tuple(strides, rank)
+    dilation_t = _as_tuple(dilation_rate, rank)
+    output_pad_t = _as_tuple(output_padding, rank)
+    spa_in = tuple(images.shape[1:-1])
+    pads = _resolve_pad_per_dim(padding, spa_in, size_t, stride_t, dilation_t)
 
-    return gathered.reshape((batch,) + out_spa + (-1,))  # type: ignore
+    out_spa = tuple(
+        (spa_in[i] - 1) * stride_t[i] - pads[i][0] - pads[i][1] + dilation_t[i] * (size_t[i] - 1) + output_pad_t[i] + 1
+        for i in range(rank)
+    )
+
+    idx_1d_per_dim: list[np.ndarray] = []
+    mask_1d_per_dim: list[np.ndarray] = []
+    for i in range(rank):
+        o = np.arange(out_spa[i])[:, None] + pads[i][0]
+        k = np.arange(size_t[i])[None, :] * dilation_t[i]
+        numer = o - k
+        l_in = numer // stride_t[i]
+        mask = (numer % stride_t[i] == 0) & (l_in >= 0) & (l_in < spa_in[i])
+        idx_1d_per_dim.append(np.where(mask, l_in, 0))
+        mask_1d_per_dim.append(mask)
+
+    return _gather_patches(images, spa_in, out_spa, size_t, idx_1d_per_dim, mask_1d_per_dim, pad_value)

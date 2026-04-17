@@ -1,40 +1,42 @@
+import numpy as np
 from keras import ops
 from keras.layers import BatchNormalization
 
 from alkaid.trace import FVArray
 
-from ._base import ReplayOperationBase
-
-
-def _scaler_and_offset(layer: BatchNormalization):
-    mean = ops.cast(layer.moving_mean, layer.dtype)
-    variance = ops.cast(layer.moving_variance, layer.dtype)
-
-    if layer.scale:
-        bn_gamma = ops.cast(layer.gamma, layer.dtype)
-    else:
-        bn_gamma = 1
-
-    if layer.center:
-        bn_beta = ops.cast(layer.beta, layer.dtype)
-    else:
-        bn_beta = 1
-
-    scale = bn_gamma / ops.sqrt(variance + layer.epsilon)  # type: ignore
-    offset = bn_beta - mean * scale  # type: ignore
-
-    return scale, offset
+from ._base import ReplayOperationBase, to_np_arr
 
 
 class ReplayBatchNormalization(ReplayOperationBase):
     handles = (BatchNormalization,)
 
+    def fused_scale_offset(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return the fused ``(scale, offset)`` such that ``output = input * scale + offset``.
+
+        Downstream packages may override this to supply bit-exact quantized
+        values without having to separately express ``gamma``/``beta``/``mean``/
+        ``variance``.
+        """
+        layer: BatchNormalization = self.op
+        mean = to_np_arr(ops.cast(layer.moving_mean, layer.dtype))
+        variance = to_np_arr(ops.cast(layer.moving_variance, layer.dtype))
+        if layer.scale:
+            gamma = to_np_arr(ops.cast(layer.gamma, layer.dtype))
+        else:
+            gamma = np.ones_like(mean)
+        if layer.center:
+            beta = to_np_arr(ops.cast(layer.beta, layer.dtype))
+        else:
+            beta = np.zeros_like(mean)
+        scale = gamma / np.sqrt(variance + layer.epsilon)
+        offset = beta - mean * scale
+        return scale, offset
+
     def call(self, inputs: FVArray, mask=None) -> FVArray:
         layer: BatchNormalization = self.op
-        scale, bias = map(ops.convert_to_numpy, _scaler_and_offset(layer))
-        # Build broadcast shape matching the layer's axis
+        scale, offset = self.fused_scale_offset()
         shape = [1] * inputs.ndim
         axis = layer.axis if isinstance(layer.axis, (list, tuple)) else [layer.axis]
         for a in axis:
             shape[a] = inputs.shape[a]
-        return inputs * scale.reshape(shape) + bias.reshape(shape)  # type: ignore
+        return inputs * scale.reshape(shape) + offset.reshape(shape)  # type: ignore

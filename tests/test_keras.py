@@ -87,8 +87,10 @@ class TestConv:
             (layers.Conv1D(4, 3, padding='same'), (16, 3)),
             (layers.Conv2D(4, (4, 3), padding='valid'), (8, 8, 3)),
             (layers.Conv2D(4, (3, 4), padding='same'), (8, 8, 3)),
+            (layers.Conv2D(4, 3, padding='valid', groups=2), (6, 6, 4)),
+            (layers.Conv2D(6, 3, padding='same', groups=3), (6, 6, 6)),
         ],
-        ids=['Conv1D[valid]', 'Conv1D[same]', 'Conv2D[valid]', 'Conv2D[same]'],
+        ids=['Conv1D[valid]', 'Conv1D[same]', 'Conv2D[valid]', 'Conv2D[same]', 'Conv2D[g=2]', 'Conv2D[g=3]'],
     )
     def case(self, request):
         return request.param
@@ -519,6 +521,147 @@ class TestExtractPatches:
 
     def test(self, op):
         _run(op, [(3, 4, 5)])
+
+
+class TestZeroPadding:
+    @pytest.fixture(
+        params=[
+            (layers.ZeroPadding1D(padding=2), (8, 4)),
+            (layers.ZeroPadding2D(padding=((1, 2), (3, 0))), (6, 6, 4)),
+            (layers.ZeroPadding3D(padding=1), (4, 4, 4, 3)),
+        ],
+        ids=['1D', '2D', '3D'],
+    )
+    def case(self, request):
+        return request.param
+
+    def test(self, case):
+        op, shape = case
+        _run(op, [shape])
+
+
+class TestCropping:
+    @pytest.fixture(
+        params=[
+            (layers.Cropping1D(cropping=(1, 2)), (8, 4)),
+            (layers.Cropping2D(cropping=((1, 2), (1, 0))), (6, 6, 4)),
+            (layers.Cropping3D(cropping=((0, 1), (1, 1), (1, 0))), (4, 4, 4, 3)),
+        ],
+        ids=['1D', '2D', '3D'],
+    )
+    def case(self, request):
+        return request.param
+
+    def test(self, case):
+        op, shape = case
+        _run(op, [shape])
+
+
+class TestUpSampling:
+    @pytest.fixture(
+        params=[
+            (layers.UpSampling1D(size=2), (4, 3)),
+            (layers.UpSampling2D(size=(2, 3)), (4, 4, 3)),
+            (layers.UpSampling3D(size=(2, 2, 2)), (2, 2, 2, 3)),
+        ],
+        ids=['1D', '2D', '3D'],
+    )
+    def case(self, request):
+        return request.param
+
+    def test(self, case):
+        op, shape = case
+        _run(op, [shape], kif=(1, 2, 2))
+
+
+class TestConvTranspose:
+    @pytest.fixture(
+        params=[
+            (layers.Conv1DTranspose(4, 3, strides=2, padding='same'), (8, 3)),
+            (layers.Conv1DTranspose(4, 3, strides=2, padding='valid'), (8, 3)),
+            (layers.Conv2DTranspose(4, 3, strides=(2, 2), padding='same'), (4, 4, 3)),
+            (layers.Conv2DTranspose(4, 3, strides=(1, 1), padding='valid'), (4, 4, 3)),
+            (layers.Conv3DTranspose(4, 3, strides=2, padding='same'), (2, 2, 2, 3)),
+        ],
+        ids=['1DT[same]', '1DT[valid]', '2DT[same]', '2DT[valid]', '3DT[same]'],
+    )
+    def case(self, request):
+        return request.param
+
+    def test(self, case):
+        op, shape = case
+        _run(op, [shape])
+
+
+class TestDepthwiseConv:
+    @pytest.fixture(
+        params=[
+            (layers.DepthwiseConv1D(3, padding='same'), (8, 3)),
+            (layers.DepthwiseConv2D(3, padding='same', depth_multiplier=2), (6, 6, 3)),
+            (layers.DepthwiseConv2D(3, padding='valid'), (6, 6, 3)),
+        ],
+        ids=['1D', '2D[dm=2]', '2D[valid]'],
+    )
+    def case(self, request):
+        return request.param
+
+    def test(self, case):
+        op, shape = case
+        _run(op, [shape])
+
+
+class TestRescaling:
+    def test(self):
+        _run(layers.Rescaling(scale=0.25, offset=1.0), [(8,)])
+
+
+class TestNormalization:
+    def test(self):
+        l = layers.Normalization(axis=-1, mean=[0.0, 1.0, 2.0, 3.0], variance=[1.0, 1.0, 1.0, 1.0])
+        l.build((None, 4))
+        _run(l, [(4,)], kif=(1, 2, 4))
+
+
+class TestPermute:
+    def test(self):
+        _run(layers.Permute((2, 1)), [(3, 4)])
+
+
+class TestCategoryEncoding:
+    def test(self):
+        V = 6
+        kif = (0, 3, 0)  # unsigned integer in [0, 8)
+
+        def hook_data(datas):
+            # Clamp to [0, V)
+            return [np.clip(d, 0, V - 1) for d in datas]
+
+        _run(layers.CategoryEncoding(num_tokens=V, output_mode='one_hot'), [(3,)], kif=kif, hook_data=hook_data)
+
+
+def _run_embedding(V=6, D=4, shape=(3,)):
+    kif = (0, 3, 0)
+    inp = layers.Input(shape=shape)
+    emb = layers.Embedding(input_dim=V, output_dim=D)
+    out = emb(inp)
+    model = keras.Model(inp, out)
+    # Set quantized weights
+    rng = np.random.default_rng(0)
+    w = np.round(rng.standard_normal((V, D)).astype(np.float32) * 4) / 4
+    emb.set_weights([w])
+    n = 16384
+    data = rng.integers(0, V, size=(n,) + shape).astype(np.float32)
+    trace_inp, trace_out = trace_model(model, inputs_kif=kif)
+    comb = trace(trace_inp, trace_out)
+    expected = model.predict(data, verbose=0, batch_size=1024)  # type: ignore
+    data_comb = data.reshape(n, -1)
+    actual = comb.predict(data_comb).reshape(expected.shape)
+    np.testing.assert_array_equal(actual, expected)
+
+
+class TestEmbedding:
+    def test(self):
+        _run_embedding()
 
 
 class TestCmp:

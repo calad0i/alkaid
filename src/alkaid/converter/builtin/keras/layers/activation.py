@@ -8,7 +8,7 @@ from keras.layers import Activation, LeakyReLU, PReLU, ReLU
 from alkaid.trace import FVArray
 from alkaid.trace.ops import relu
 
-from ._base import ReplayOperationBase, to_np_arr
+from ._base import ReplayOperationBase
 
 
 def _erf(x: np.ndarray) -> np.ndarray:
@@ -117,7 +117,7 @@ class ReplayReLU(ReplayOperationBase):
         elif isinstance(op, LeakyReLU):
             th, neg, maxv = 0, op.negative_slope, None
         elif isinstance(op, PReLU):
-            th, neg, maxv = 0, to_np_arr(op.alpha), None
+            th, neg, maxv = 0, self._load_weight('alpha'), None
         else:
             raise TypeError(f'Unsupported activation layer: {type(op)}')
 
