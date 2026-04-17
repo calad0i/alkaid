@@ -20,6 +20,7 @@ class XLSModel:
         self._solution = logic
         self._prj_name = prj_name or 'xls_model'
         self.built = False
+        self._jit = None
 
     def _build(self):
         """Build the XLS IR function from the solution."""

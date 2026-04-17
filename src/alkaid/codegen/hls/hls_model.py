@@ -222,15 +222,11 @@ class HLSModel:
                     p.unlink()
 
         try:
-            r = subprocess.run(args, env=env, check=True, cwd=self._path / 'sim', capture_output=not verbose)
+            subprocess.run(args, env=env, check=True, cwd=self._path / 'sim', capture_output=not verbose)
         except subprocess.CalledProcessError as e:
             print(e.stderr.decode(), file=sys.stderr)
             print(e.stdout.decode(), file=sys.stdout)
             raise RuntimeError('Compilation failed!!') from e
-        if r.returncode != 0:
-            print(r.stderr.decode(), file=sys.stderr)
-            print(r.stdout.decode(), file=sys.stderr)
-            raise RuntimeError('Compilation failed!!')
 
         self._load_lib(self._uuid)
 

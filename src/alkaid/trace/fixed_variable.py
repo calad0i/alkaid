@@ -1,5 +1,5 @@
 import random
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from copy import copy
 from dataclasses import dataclass
 from functools import cached_property, lru_cache
@@ -11,7 +11,7 @@ from uuid import UUID
 import numpy as np
 from numpy.typing import NDArray
 
-from .._binary.cmvm_bin import get_lsb_loc, get_lsb_loc_arr, iceil_log2, solve
+from .._binary.cmvm_bin import get_lsb_loc, get_lsb_loc_arr, solve
 from ..types import QInterval, minimal_kif
 from .affine_interval import AffineInterval
 
@@ -179,24 +179,6 @@ class LookupTable:
 
     def __hash__(self) -> int:
         return hash(self.spec.hash)
-
-
-def to_csd_powers(x: float) -> Generator[float, None, None]:
-    """Convert a float to a list of +/- powers of two in CSD representation."""
-    if x == 0:
-        return
-    f = -get_lsb_loc(x)
-    x = x * 2**f
-    s = 2**-f
-    N = iceil_log2(x * 1.5)
-    for n in range(N - 1, -1, -1):
-        _2pn = 2**n
-        thres = _2pn / 1.5
-        bit = int(x > thres) - int(x < -thres)
-        v = _2pn * bit
-        x -= v
-        if v != 0:
-            yield v * s
 
 
 def _binary_bit_op(a: float, b: float, op: int, qint0: QInterval, qint1: QInterval, qint: QInterval):
@@ -789,10 +771,6 @@ class FVariable:
         step = self.step
         high = max(-self.low, self.high)
         return self.msb_mux(-self, self, (0, float(high), float(step)))
-
-    def abs(self):
-        """Get the absolute value of this variable."""
-        return abs(self)
 
     def __gt__(self, other: 'FVariable|float|int'):
         """Get a variable that is 1 if this variable is greater than other, else 0."""

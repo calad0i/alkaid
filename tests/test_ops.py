@@ -126,10 +126,16 @@ class OperationTestSynth(OperationTest):
         if np.sum(comb.out_kifs) == 0 or np.sum(comb.inp_kifs) == 0:
             return  # By chance, the comb logic is trivial/invalid.
         xls_model = XLSModel(comb)
+        before = xls_model.__repr__()
         xls_model.jit()
+        after = xls_model.__repr__()
+        assert before != after
         comb_pred = comb.predict(test_data, n_threads=1)
         xls_pred = xls_model.predict(test_data, n_threads=1)
         np.testing.assert_equal(xls_pred, comb_pred)
+        verilog = xls_model.compile(f'{temp_directory}/model.v')
+        assert verilog is not None
+        subprocess.run(['rm', '-rf', temp_directory])
 
     @pytest.mark.slow
     @pytest.mark.parametrize('latency_cutoff', (-1, 1))
