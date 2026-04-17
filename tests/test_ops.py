@@ -29,6 +29,7 @@ class OperationTest:
     def _comb(self, op_func, inp: FVArray):
         out = quantize(op_func(inp), 1, 12, 12)
         comb = trace(inp, out, optimize=False)
+        _ = comb.__repr__()
         return comb
 
     @pytest.fixture()
@@ -79,12 +80,12 @@ class OperationTestSynth(OperationTest):
     @pytest.mark.parametrize('latency_cutoff', (-1, 0.5, 1))
     def test_rtl_gen(self, comb: CombLogic, flavor: str, latency_cutoff, temp_directory: str, test_data: np.ndarray):
         rtl_model = RTLModel(comb, temp_directory, flavor=flavor, latency_cutoff=latency_cutoff)
-
+        xls_opt = latency_cutoff == 1
         if np.sum(comb.inp_kifs) == 0 or np.sum(comb.out_kifs) == 0:
             return  # By chance, the comb logic is trivial/invalid.
         before = rtl_model.__repr__()
         if flavor == 'verilog' and shutil.which('verilator') is None:
-            rtl_model.write()
+            rtl_model.write(xls_opt=xls_opt)
             subprocess.run(['rm', '-rf', temp_directory])
             pytest.skip('verilator not found')
         if flavor == 'vhdl' and shutil.which('ghdl') is None:

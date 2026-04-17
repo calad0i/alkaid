@@ -54,5 +54,6 @@ def test_solve(kernel, method0, method1, hard_dc, decompose_dc, search_all_decom
 
     combs = tuple(optimize(stage, False) for stage in sol.solutions)
     pipe = Pipeline(combs)
+    _ = pipe.__repr__()
 
     np.testing.assert_allclose(pipe.kernel, kernel)
