@@ -67,6 +67,10 @@ functions = {
     'argmin_4': lambda x, w: np.argmin(x[..., :4], axis=-1, keepdims=True),
     'round': lambda x, w: np.round(x),
     'ceil': lambda x, w: np.ceil(x),
+    'average0': lambda x, w: np.average(x, axis=-1, keepdims=True),
+    'average1': lambda x, w: np.average(x, axis=-1, weights=np.arange(0.5, 8.5), keepdims=True),
+    'div': lambda x, w: np.round(10 / np.maximum(x, 0.125)),
+    'count_nonzero': lambda x, w: np.count_nonzero(x, axis=-1, keepdims=True),
 }
 
 
