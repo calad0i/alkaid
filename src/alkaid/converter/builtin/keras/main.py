@@ -5,6 +5,7 @@ from typing import Any
 import keras
 from keras import KerasTensor, Operation
 
+from alkaid.converter._plugin_loader import maybe_load_for_class
 from alkaid.converter.plugin import ALIRTracerPluginBase, _flatten_arr
 from alkaid.trace import FVArray
 from alkaid.trace import trace as _trace
@@ -119,7 +120,10 @@ def _trace_model(
                     n_nested=n_nested + 1,
                 )  # type: ignore
             else:
-                mirror_op = _registry[op.operation.__class__](op.operation)
+                op_cls = op.operation.__class__
+                if op_cls not in _registry:
+                    maybe_load_for_class(op_cls, 'alkaid_keras', verbose=verbose)
+                mirror_op = _registry[op_cls](op.operation)
                 _dump = mirror_op(*args, **kwargs)
             if verbose:
                 comb = _trace(_inputs, _flatten_arr(_dump['final']))

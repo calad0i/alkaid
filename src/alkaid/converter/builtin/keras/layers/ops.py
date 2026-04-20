@@ -99,11 +99,12 @@ class ReplayMerge(ReplayOperationBase):
         keras.layers.Average,
     )
 
+    def _dispatch_key(self) -> str:
+        return type(self.op).__name__
+
     def call(self, inputs: tuple[FVArray, ...]) -> FVArray:
-        op = self.op
-        name = op.__class__.__name__
         _inputs: FVArray = np.stack(np.broadcast_arrays(*inputs), axis=0)  # type: ignore
-        match name:
+        match self._dispatch_key():
             case 'Add':
                 return np.sum(_inputs, axis=0)
             case 'Average':
@@ -118,10 +119,10 @@ class ReplayMerge(ReplayOperationBase):
             case 'Minimum':
                 return np.amin(_inputs, axis=0)
             case 'Concatenate':
-                return np.concatenate(_inputs, axis=op.axis)  # type: ignore
+                return np.concatenate(_inputs, axis=self.op.axis)  # type: ignore
 
             case _:
-                raise TypeError(f'Unsupported layer type: {type(op)}')
+                raise TypeError(f'Unsupported layer type: {type(self.op)}')
 
 
 class ReplayRepeatVector(ReplayOperationBase):
@@ -142,8 +143,11 @@ class ReplayGetItem(ReplayOperationBase):
 class ReplayReduction(ReplayOperationBase):
     handles = (Sum, Max, Min, CountNonzero, All, Any, Prod, Mean)
 
+    def _dispatch_key(self) -> str:
+        return type(self.op).__name__
+
     def call(self, x: FVArray, axis=None, keepdims=False) -> FVArray:
-        match self.op.__class__.__name__:
+        match self._dispatch_key():
             case 'Sum':
                 op = np.sum
             case 'Max':
@@ -180,9 +184,11 @@ class ReplayAverage(ReplayOperationBase):
 class ReplayArithmetic(ReplayOperationBase):
     handles = (Add, Subtract, Multiply, TrueDivide, Divide, Maximum, Minimum)
 
+    def _dispatch_key(self) -> str:
+        return type(self.op).__name__
+
     def call(self, x1: FVArray, x2: FVArray) -> FVArray:
-        name = self.op.__class__.__name__
-        match name:
+        match self._dispatch_key():
             case 'Add':
                 return x1 + x2
             case 'Subtract':

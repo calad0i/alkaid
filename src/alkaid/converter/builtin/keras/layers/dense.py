@@ -22,7 +22,7 @@ class ReplayDense(ReplayOperationBase):
             eq = op.equation
         else:
             raise TypeError(f'Unsupported layer type: {type(op)}')
-        return (np.einsum(eq, inputs[None], kernel) + bias)[0]
+        return np.einsum(eq, inputs, kernel) + bias
 
 
 __all__ = ['ReplayDense']

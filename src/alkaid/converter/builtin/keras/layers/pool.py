@@ -33,7 +33,7 @@ class ReplayPool(ReplayOperationBase):
         if 'Max' in cname:
             op = 'max'
         else:
-            assert 'Average' in cname, f'Unsupported global pooling layer: {cname}'
+            assert 'Average' in cname or 'Avg' in cname, f'Unsupported global pooling layer: {cname}'
             op = 'avg'
 
         data_format = self.op.data_format
