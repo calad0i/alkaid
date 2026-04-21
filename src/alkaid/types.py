@@ -465,14 +465,16 @@ class CombLogic(NamedTuple):
             json.dump(dump, f, cls=JSONEncoder, separators=(',', ':'))
 
     @classmethod
-    def deserialize(cls, dump: dict):
+    def from_dict(cls, dump: dict, raw=False):
         """Load ALIR from a serialized dictionary."""
 
-        assert dump['meta'] == 'ALIRModel', f'Unknown model type {dump["meta"]}'
-        assert dump['spec_version'] == ALIR_SPEC_VERSION, (
-            f'Unsupported spec version {dump["spec_version"]}: expected {ALIR_SPEC_VERSION}'
-        )
-        data = dump['model']
+        if not raw:
+            assert dump['meta'] == 'ALIRModel', f'Unknown model type {dump["meta"]}'
+            assert dump['spec_version'] == ALIR_SPEC_VERSION, (
+                f'Unsupported spec version {dump["spec_version"]}: expected {ALIR_SPEC_VERSION}'
+            )
+
+        data = dump['model'] if not raw else dump
 
         ops = []
         for _op in data[5]:
@@ -501,7 +503,7 @@ class CombLogic(NamedTuple):
         """Load the solution from a file."""
         with open(path) as f:
             data = json.load(f)
-        return cls.deserialize(data)
+        return cls.from_dict(data)
 
     @property
     def ref_count(self) -> np.ndarray:
@@ -673,7 +675,7 @@ class Pipeline(NamedTuple):
         return self.solutions[-1].out_qint
 
     @property
-    def out_latencies(self):
+    def out_latency(self):
         return self.solutions[-1].out_latency
 
     @property
@@ -685,11 +687,11 @@ class Pipeline(NamedTuple):
         return self.solutions[0].inp_shifts
 
     @property
-    def out_shift(self):
+    def out_shifts(self):
         return self.solutions[-1].out_shifts
 
     @property
-    def out_neg(self):
+    def out_negs(self):
         return self.solutions[-1].out_negs
 
     def __repr__(self) -> str:
@@ -701,20 +703,27 @@ class Pipeline(NamedTuple):
 
     def save(self, path: str | Path):
         """Save the solution to a file."""
+        dump = {'model': self, 'meta': 'ALIRPipeline', 'spec_version': ALIR_SPEC_VERSION}
         with open(path, 'w') as f:
-            json.dump(self, f, cls=JSONEncoder, separators=(',', ':'))
+            json.dump(dump, f, cls=JSONEncoder, separators=(',', ':'))
 
     @classmethod
-    def deserialize(cls, data: dict):
-        """Load the solution from a file."""
-        return cls(solutions=tuple(CombLogic.deserialize(sol) for sol in data[0]))
+    def from_dict(cls, data: dict, raw=False):
+        if not raw:
+            assert data['meta'] == 'ALIRPipeline', f'Unknown model type {data["meta"]}'
+            assert data['spec_version'] == ALIR_SPEC_VERSION, (
+                f'Unsupported spec version {data["spec_version"]}: expected {ALIR_SPEC_VERSION}'
+            )
+        data = data['model'] if not raw else data
+
+        return cls(solutions=tuple(CombLogic.from_dict(sol, raw=True) for sol in data[0]))
 
     @classmethod
     def load(cls, path: str):
         """Load the solution from a file."""
         with open(path) as f:
             data = json.load(f)
-        return cls.deserialize(data)
+        return cls.from_dict(data)
 
     @property
     def reg_bits(self):

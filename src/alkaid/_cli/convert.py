@@ -49,7 +49,7 @@ def to_alkaid(
             data = json.load(f)
         if data.get('meta', None) != 'ALIRModel':
             raise ValueError('Unknown model type in JSON file.')
-        comb = CombLogic.deserialize(data)
+        comb = CombLogic.from_dict(data)
         if opt:
             comb = optimize(comb)
         model = None  # type: ignore

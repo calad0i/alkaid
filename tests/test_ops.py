@@ -8,6 +8,7 @@ from alkaid.codegen import HLSModel, RTLModel
 from alkaid.trace import FVArray, trace
 from alkaid.trace.ops import quantize, relu
 from alkaid.trace.passes import optimize
+from alkaid.trace.pipeline import Pipeline, to_pipeline
 from alkaid.types import CombLogic
 
 
@@ -72,6 +73,18 @@ class OperationTest:
         comb.save(f'{temp_directory}/comb.json')
         comb2 = CombLogic.load(f'{temp_directory}/comb.json')
         assert comb == comb2
+
+    def test_pipe_serialization(self, comb: CombLogic, temp_directory: str):
+        pipe = to_pipeline(comb, 2, verbose=True)
+        pipe.save(f'{temp_directory}/pipe.json')
+        pipe2 = Pipeline.load(f'{temp_directory}/pipe.json')
+        assert pipe == pipe2
+        assert pipe.latency == comb.latency
+        assert pipe.inp_latency == comb.inp_latency
+        assert pipe.out_latency == comb.out_latency
+        assert pipe.inp_shifts == comb.inp_shifts
+        assert pipe.out_shifts == comb.out_shifts
+        assert pipe.out_negs == comb.out_negs
 
 
 class OperationTestSynth(OperationTest):
