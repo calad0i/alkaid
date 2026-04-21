@@ -1,3 +1,4 @@
+from functools import cache
 from importlib.metadata import EntryPoint, entry_points
 from typing import Any, Literal, overload
 
@@ -10,6 +11,7 @@ __all__ = ['trace_model']
 ENTRY_POINT_GROUP = 'alir_tracer.plugins'
 
 
+@cache
 def get_available_plugins() -> dict[str, EntryPoint]:
     group_eps = entry_points().select(group=ENTRY_POINT_GROUP)
     plugin_repo = {ep.name: ep for ep in group_eps}

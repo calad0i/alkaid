@@ -4,7 +4,7 @@ from typing import Any
 import torch
 from torch.fx import Node, Tracer
 
-from alkaid.converter._plugin_loader import maybe_load_for_callable, maybe_load_for_class
+from alkaid.converter._plugin_loader import maybe_load_for
 from alkaid.converter.plugin import ALIRTracerPluginBase
 from alkaid.trace import FVArray
 
@@ -14,7 +14,7 @@ from .layers import _functional_map, _method_map, _modules_map, torch_numpy_unar
 class GraphTracer(Tracer):
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str):
         if type(m) not in _modules_map:
-            maybe_load_for_class(type(m), 'alkaid_torch')
+            maybe_load_for(m, 'torch', lax=True)
         if type(m) in _modules_map:
             return True
         return super().is_leaf_module(m, module_qualified_name)
@@ -114,8 +114,7 @@ class TorchALIRTracer(ALIRTracerPluginBase):
                 case 'call_module':
                     target: str = node.target  # type: ignore
                     module = modules[target]
-                    if type(module) not in _modules_map:
-                        maybe_load_for_class(type(module), 'alkaid_torch')
+                    maybe_load_for(type(module), 'torch')
                     assert type(module) in _modules_map, f'{type(module)} is not supported'
                     replay_cls = _modules_map[type(module)]
                     replay = replay_cls(module)
@@ -127,7 +126,7 @@ class TorchALIRTracer(ALIRTracerPluginBase):
                 case 'call_function':
                     torch_fn: Callable = node.target  # type: ignore
                     if torch_fn not in _functional_map:
-                        maybe_load_for_callable(torch_fn, 'alkaid_torch')
+                        maybe_load_for(type(torch_fn), 'torch')
                     assert torch_fn in _functional_map, f'{torch_fn} is not registered in functional map'
                     result = _functional_map[torch_fn](*args, **kwargs)
                     env[node.name] = result
@@ -138,7 +137,7 @@ class TorchALIRTracer(ALIRTracerPluginBase):
                     method: str = node.target  # type: ignore
                     receiver, *rest = args
                     if method not in _method_map and method not in torch_numpy_unary_map:
-                        maybe_load_for_class(type(receiver), 'alkaid_torch')
+                        maybe_load_for(type(receiver), 'torch')
                     result = _dispatch_method(method, receiver, rest, kwargs)
                     env[node.name] = result
                     name = maybe_rename(node.name)

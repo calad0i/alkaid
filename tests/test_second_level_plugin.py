@@ -52,6 +52,10 @@ class _FakeEP:
     def load(self):
         return self._func
 
+    @property
+    def name(self):
+        return self.dist.name
+
 
 class _FakeEPs:
     def __init__(self, eps_by_group: dict[str, list[_FakeEP]]):
@@ -62,11 +66,10 @@ class _FakeEPs:
 
 
 @pytest.fixture
-def fake_plugin_env(monkeypatch):
-    ep = _FakeEP('my-fake-dist', __name__ + ':_plugin_register', _plugin_register)
+def fake_plugin_env(monkeypatch: pytest.MonkeyPatch):
+    ep = _FakeEP('my_fake_pkg', __name__ + ':_plugin_register', _plugin_register)
     monkeypatch.setattr(pl, 'entry_points', lambda: _FakeEPs({'alkaid_keras': [ep]}))
-    monkeypatch.setattr(pl, 'packages_distributions', lambda: {'my_fake_pkg': ['my-fake-dist']})
-    monkeypatch.setattr(pl, '_LOADED', {})
+    monkeypatch.setattr(pl, '_LOADED', set())
     _registry.pop(_FakeLayer, None)
     _REGISTER_CALLS.clear()
     yield
