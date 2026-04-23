@@ -15,8 +15,8 @@ namespace alir {
         int32_t fractionals;
 
         int32_t width() const { return integers + fractionals + (is_signed ? 1 : 0); }
-        int32_t int_max() const { return (1 << (width() - (is_signed ? 1 : 0))) - 1; }
-        int32_t int_min() const { return is_signed ? -(1 << (width() - 1)) : 0; }
+        int64_t int_max() const { return (1ll << (width() - (is_signed ? 1 : 0))) - 1; }
+        int64_t int_min() const { return is_signed ? -(1ll << (width() - 1)) : 0; }
 
         DType operator<<(int32_t shift) const {
             return DType{is_signed, integers + shift, fractionals - shift};

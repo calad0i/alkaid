@@ -143,8 +143,7 @@ namespace alir {
     ) const {
         int32_t shift = dtype_from.fractionals - dtype_to.fractionals;
         value = value >> shift;
-        // int32_t int_max = dtype_to.int_max();
-        int32_t int_min = dtype_to.int_min();
+        int64_t int_min = dtype_to.int_min();
         const int64_t _mod = 1LL << dtype_to.width();
         value =
             ((value - int_min + (std::abs(value) / _mod + 1) * _mod) % _mod) + int_min;
@@ -168,8 +167,8 @@ namespace alir {
         int32_t data_high,
         int32_t data_low
     ) const {
-        int32_t v1 = value;
-        int32_t v2 = data_low;
+        int64_t v1 = value;
+        int64_t v2 = data_low;
         int32_t shift = data_high;
         auto dtype0 = dtype_from;
         int32_t actual_shift = -shift + dtype0.fractionals;
