@@ -13,7 +13,7 @@ from alkaid.types import CombLogic
 
 
 class OperationTest:
-    def test_op(self, op_func, test_data: np.ndarray, comb: CombLogic, n_samples: int):
+    def test_eq(self, op_func, test_data: np.ndarray, comb: CombLogic, n_samples: int):
         traced_out = comb.predict(test_data, n_threads=1)
         expected_out = quantize(op_func(quantize(test_data, *comb.inp_kifs)).reshape(n_samples, -1), 1, 12, 12)
         np.testing.assert_equal(traced_out, expected_out)
