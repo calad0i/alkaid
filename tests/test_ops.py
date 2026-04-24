@@ -43,7 +43,7 @@ class OperationTest:
 
     @pytest.fixture()
     def n_samples(self) -> int:
-        return 10000
+        return 10001
 
     @pytest.fixture()
     def inp(self) -> FVArray:

@@ -1,140 +1,65 @@
 #pragma once
 
-#include <cstdint>
-#include <stdalign.h>
-#include <string>
-#include <vector>
+#include "alir_types.hh"
+
 #include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include <omp.h>
 
 namespace alir {
 
-    struct DType {
-        int32_t is_signed;
-        int32_t integers;
-        int32_t fractionals;
-
-        int32_t width() const { return integers + fractionals + (is_signed ? 1 : 0); }
-        int64_t int_max() const { return (1ll << (width() - (is_signed ? 1 : 0))) - 1; }
-        int64_t int_min() const { return is_signed ? -(1ll << (width() - 1)) : 0; }
-
-        DType operator<<(int32_t shift) const {
-            return DType{is_signed, integers + shift, fractionals - shift};
-        }
-
-        DType operator>>(int32_t shift) const {
-            return DType{is_signed, integers - shift, fractionals + shift};
-        }
-
-        DType with_fractionals(int32_t new_fractionals) const {
-            return DType{
-                is_signed, integers + (fractionals - new_fractionals), new_fractionals
-            };
-        }
-
-        DType with_integers(int32_t new_integers) const {
-            return DType{
-                is_signed, new_integers, fractionals + (integers - new_integers)
-            };
-        }
-
-        DType with_signed(int32_t new_is_signed) const {
-            return DType{new_is_signed, integers, fractionals};
-        }
-    };
-
-    struct alignas(4) Op {
-        int32_t opcode;
-        int32_t id0;
-        int32_t id1;
-        int32_t data_low;
-        int32_t data_high;
-        DType dtype; // (signed, integer_bits, fractional_bits)
-    };
-
     class ALIRInterpreter {
       private:
-        size_t n_in, n_out, n_ops, n_tables;
+        size_t n_in = 0, n_out = 0, n_ops = 0, n_slots = 0, n_tables = 0;
         int32_t max_ops_width = 0, max_inp_width = 0, max_out_width = 0;
+        size_t bits_in = 0, bits_out = 0;
+
         std::vector<int32_t> inp_shifts;
-        std::vector<int32_t> out_idxs;
+        std::vector<int32_t> out_idxs;      // op-indexed (from on-disk format)
+        std::vector<int32_t> out_idxs_slot; // slot-indexed (after transpile)
         std::vector<int32_t> out_shifts;
         std::vector<int32_t> out_negs;
-        std::vector<Op> ops;
         std::vector<std::vector<int32_t>> lookup_tables;
 
-        void validate() const;
+        std::vector<OpExec> ops_exec;
 
-        // 0, 1
-        int64_t shift_add(
-            int64_t v1,
-            int64_t v2,
-            int32_t shift,
-            bool sign,
-            const DType &dtype0,
-            const DType &dtype1,
-            const DType &dtype_out
-        ) const;
+        std::vector<double> input_scales;   // per-op (-1 only)
+        std::vector<double> output_scales;  // per output
+        std::vector<double> op_dump_scales; // per op
 
-        int64_t const_add(
-            int64_t value,
-            DType dtype_from,
-            DType dtype_to,
-            int32_t data_high,
-            int32_t data_low
-        ) const;
+        std::vector<int32_t> op_out_addr; // op -> slot, kept for dump path
 
-        // 2, -2
-        int64_t relu(int64_t value, const DType &dtype_from, const DType &dtype_to) const;
+        void build_exec_program(const std::vector<Op> &ops);
 
-        // 3, -3
-        int64_t
-        quantize(int64_t value, const DType &dtype_from, const DType &dtype_to) const;
-
-        // 6, -6
-        bool get_msb(int64_t value, const DType &dtype) const;
-
-        int64_t msb_mux(
-            int64_t v0,
-            int64_t v1,
-            int64_t v_cond,
-            int32_t _shift,
-            const DType &dtype0,
-            const DType &dtype1,
-            const DType &dtype_cond,
-            const DType &dtype_out
-        ) const;
-
-        std::vector<int64_t>
-        exec_ops(const std::span<const double> &inputs, bool verbose, bool dump) const;
-
-        // 8
-        int64_t logic_lookup(int64_t v1, const Op &op, const DType dtype_in) const;
-
-        int64_t bit_unary(int64_t v, const Op &op) const;
-
-        int64_t bit_binary(int64_t v1, int64_t v2, const Op &op) const;
+        template <int B> void exec_batch_core(const double *inputs, size_t batch_size, int64_t *buffer) const;
 
       public:
         static const int alir_version = 2;
 
         void load_from_file(const std::string &filename);
-
         void load_from_binary(const std::span<const int32_t> &binary_data);
 
-        std::vector<double> inference(
-            const std::span<const double> &inputs,
-            bool verbose = false,
-            bool dump = false
-        );
-        void inference(
-            const std::span<const double> &inputs,
-            std::span<double> &outputs,
-            bool verbose = false,
-            bool dump = false
-        );
+        // Accept CombLogic JSON directly; handles gzip and plain.
+        void load_from_json_file(const std::string &path);
+        void load_from_json_string(std::string_view json_text);
 
         void print_program_info() const;
+
+        // buffer must be n_slots * B int64s.
+        template <int B>
+        void exec_batch(const double *inputs, double *outputs, size_t batch_size, int64_t *buffer) const;
+
+        // (batch_size, n_ops) per-op scaled decimals, for debug cross-check.
+        template <int B>
+        void dump_batch(const double *inputs, double *dump_outputs, size_t batch_size, int64_t *buffer) const;
+
+        size_t get_n_in() const { return n_in; }
+        size_t get_n_out() const { return n_out; }
+        size_t get_n_ops() const { return n_ops; }
+        size_t get_n_slots() const { return n_slots; }
     };
 
 } // namespace alir
