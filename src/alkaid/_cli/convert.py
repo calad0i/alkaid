@@ -44,12 +44,11 @@ def to_alkaid(
         inp, out = trace_model(model, HWConfig(*hwconf), {'hard_dc': hard_dc}, verbose > 1, inputs_kif=inputs_kif)
         comb = trace(inp, out, optimize=opt)
 
-    elif model_path.suffix == '.json':
-        with open(model_path) as f:
-            data = json.load(f)
-        if data.get('meta', None) != 'ALIRModel':
-            raise ValueError('Unknown model type in JSON file.')
-        comb = CombLogic.from_dict(data)
+    elif model_path.suffix == '.json' or ''.join(model_path.suffixes) == '.json.gz':
+        try:
+            comb = CombLogic.load(model_path)
+        except Exception as e:
+            raise RuntimeError(f'Failed to load CombLogic from {model_path}: {e}')
         if opt:
             comb = optimize(comb)
         model = None  # type: ignore
