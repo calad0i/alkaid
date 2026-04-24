@@ -1,113 +1,104 @@
 Alkaid Low-Level Intermediate Representation (ALIR)
-=============================================
+===================================================
 
-In alkaid, all operations are converted to a RISC-like, instruction set level intermediate representation, Alkaid Low-level Intermediate Representation (ALIR). ALIR is designed to be minimal and lightweight, while being extensible and satisfying the requirements for representing neural networks required in the framework. Specifically, each ALIR program is in SSA form and contains one block of logic that are fully parallelizable (i.e., all combinational), and resource multiplexing shall be performed on a higher level.
+ALIR is alkaid's low-level static-dataflow representation. A `CombLogic` program is a single SSA-style combinational block: each operation writes one buffer slot, later operations may read earlier slots, and outputs are selected from the final buffer.
 
-One program represented in ALIR consists of the following components:
+The serialized JSON form written by `CombLogic.save()` is:
 
-## Program Structure
+- `meta`: the string `ALIRModel`.
+- `spec_version`: the ALIR spec version. The current version is `2`.
+- `model`: the `CombLogic` payload described below.
 
-- `spec version`: int
-    - The spec version of the ALIR program. Currently, the version is `2`.
-- `firmware version`: int
-    - Reserved for downstream firmware versioning. The ALIR interpreter **must** ignore this field.
-- `shape`: tuple<int, int>
-    - The number of inputs and outputs of the program.
-- `inp_shifts`: vector<int>
-    - The shifts required to interpret the input data. (i.e., number of integers in the fixed-point representation)
-- `out_idxs`: vector<int>
-    - The indices of the output data shall be read from the buffer
-- `out_shifts`: vector<int>
-    - The shifts required to interpret the output data.
-- `out_negs`: vector<bool>
-    - The signs of the output data.
-- `ops`: vector<Op>
-    - The core list of operations for populating the full buffer.
+## `CombLogic` Payload
 
-Each operation is represented as a `Op` object, consists of the following components:
-- `opcode`: int
-    - The operation code, see [OpCode](#opcode).
-- `id0`, `id1`: int
-    - The first and second operand indices in the buffer. Unused operands must be set to `-1`.
-- `data`: int64
-    - Extra integer data for the operation, functionality depends on the opcode.
-- `dtype`: tuple<float, float, float> OR tuple<int/bool, int, int>
-    - Annotates the datatype of the output buffer as a quantization interval.
-    - (min, max, step) or (signed, integer_bits (excl sign bit), fractional_bits). If using (min, max, step), format, it is assumed that the minimal fixed-point representation that contains the full range of the quantization interval is used. (e.g., (-3., 3., 1.) is the same as (-4., 3., 1.): both are (1, 2, 0) in fixed point representation). Step **must** be of a power of two.
-    - **Must** cause no overflow if the operation itself does not imply quantization.
+The `model` payload is stored as an array in the same order as the `CombLogic` fields:
 
-The program is executed as follows:
-1. Instantiate an empty buffer of size `len(ops)`.
-2. Go through the list of operations in `ops`. Fill the i-th index of the buffer with the result of the i-th operation: buf[i] = ops[i](buf, inp)
-3. Instantiate the output buffer of size `shape[1]`.
-4. Fill output buffer:
-  - `output_buf[i] = buf[out_idxs[i]] * 2^out_shifts[i] * (-1 if out_negs[i] else 1)`
+1. `shape`: `[n_inputs, n_outputs]`.
+2. `inp_shifts`: input scale shifts.
+3. `out_idxs`: buffer indices used as outputs. `-1` means a zero output.
+4. `out_shifts`: output scale shifts.
+5. `out_negs`: output sign flags.
+6. `ops`: operation records.
+7. `carry_size`: CMVM cost/latency configuration.
+8. `adder_size`: CMVM cost/latency configuration.
+9. `lookup_tables`: optional lookup table records, present only when lookup operations are used.
 
-### OpCode
-The operation codes are defined as follows:
-- `-2`: Explicit negation
+Each operation record is stored in the same order as the `Op` fields:
+
+1. `id0`: first operand or input index.
+2. `id1`: second operand, or `-1` when unused.
+3. `opcode`: operation code. See the operation code table below.
+4. `data`: signed 64-bit integer payload whose meaning depends on the operation.
+5. `qint`: output quantization interval as `[min, max, step]`.
+6. `latency`: estimated availability time.
+7. `cost`: estimated operation cost.
+
+Unused `id0` or `id1` fields must be `-1`. For non-input operations, operand indices must refer only to earlier operations. For opcode `6`, the condition index stored in `data_low` must also refer to an earlier operation.
+
+## Operation Codes
+
+- `-2`: Explicit negation.
   - `buf[i] = -buf[id0]`
-- `-1`: Copy from input buffer (**implies quantization**)
+- `-1`: Copy from the external input buffer and quantize.
   - `buf[i] = input[id0]`
-- `0/1`: Addition/Subtraction
-  - `buf[i] = buf[id0] +/- buf[id1] * 2^data`
-- `2`: ReLU (**implies quantization**)
+- `0`: Addition.
+  - `buf[i] = buf[id0] + buf[id1] * 2^data`
+- `1`: Subtraction.
+  - `buf[i] = buf[id0] - buf[id1] * 2^data`
+- `2`: ReLU with output quantization.
   - `buf[i] = quantize(relu(buf[id0]))`
-- `3`: Quantization (**implies quantization**)
+- `3`: Output quantization.
   - `buf[i] = quantize(buf[id0])`
-- `4`: Add a constant
-  - `buf[i] = buf[id0] + data * qint.step`
-- `5`: Define a constant
+- `4`: Add a constant.
+  - `data_low` is a signed integer payload, `data_high` is a signed shift, and the constant is `data_low * 2^-data_high`.
+- `5`: Define a constant.
   - `buf[i] = data * qint.step`
-- `6`: Mux by MSB
-  - `buf[i] = MSB(buf[id_c]) ? buf[id0] : buf[id1] * 2^shift` (**implies msb chopping**)
-  - `id_c = int32(data & 0xFFFFFFFF)`, `shift = int32(data >> 32)`
-- `7`: Multiplication
+- `6`: Mux by the most-significant bit of a condition value.
+  - `data_low` is the condition buffer index.
+  - `data_high` is the shift applied to `id1`.
+  - `buf[i] = MSB(buf[data_low]) ? buf[id0] : buf[id1] * 2^data_high`, then quantized to `qint`.
+- `7`: Multiplication.
   - `buf[i] = buf[id0] * buf[id1]`
-- `8`: Logic Lookup
-  - `buf[i] = lookup_table[data_lower_i32][index(buf[id0])]`
-  - `index()` converts the fixed-point representation to integer index by `(buf[id0] - qint.min) / qint.step` or `(buf[id0] + signed*2^integer_bits) * 2^fractional_bits - data_higher_i32` depending on the dtype format.
-- `9`: Unary bitwise operation
-  - `buf[i] = unary_bit_op(buf[id0], data, qint[id0], qint[i])`
-  - `data` selects the sub-operation: `0` = bitwise NOT (`~`), `1` = reduce-any, `2` = reduce-all.
-  - For bitwise NOT, the position of the decimal point and interpretation of the bits does not change.
-  - For reduce-any/reduce-all, the result is a single-bit boolean.
-- `10`: Binary bitwise operation
-  - `buf[i] = binary_bit_op(v0, v1 << shift, sub_opcode, qint[id0], qint[id1]*2^shift, qint[i])`
-  - `data` encoding: `bits[31:0]` = shift (signed), `bit[32]` = invert operand 0, `bits[63:56]` = sub-opcode.
-  - Sub-opcodes: `0` = AND (`&`), `1` = OR (`|`), `2` = XOR (`^`).
+- `8`: Logic lookup table.
+  - `data_low` is the lookup table index.
+  - In bytecode, `data_high` stores the table pad offset derived from the producer quantization interval.
+- `9`: Unary bitwise operation.
+  - `data = 0`: bitwise NOT.
+  - `data = 1`: reduce-any.
+  - `data = 2`: reduce-all.
+- `10`: Binary bitwise operation.
+  - `data[31:0]` is the signed shift aligning operand 1 to operand 0.
+  - `data[55:32]` is reserved.
+  - `data[63:56]` is the sub-operation: `0` = AND, `1` = OR, `2` = XOR.
 
-In all cases, unused id0 or id1 **must** be set to `-1`; id0, id1 (and data for opcode=6) **must** be smaller than the index of the operation itself to ensure causality. All quantization are direct bit-drop in binary format (i.e., WRAP for overflow and TRUNC for rounding).
+Quantizing operations use direct fixed-point bit drop semantics: wrap for overflow and truncate for rounding.
 
-### Binary Representation
-The binary representation of the program is as follows, in order:
-- `spec version`: int32
-- `firmware version`: int32
-- `shape`: int32[2]
-- `len(ops)`: int32
-- `len(tables)`: int32
-- `inp_shifts`: int32[shape[0]]
-- `out_idxs`: int32[shape[1]]
-- `out_shifts`: int32[shape[1]]
-- `out_negs`: int32[shape[1]]
-- `ops`: `Op[len(ops)]`
-- `table_size`: int32[`len(tables)`]
-- `tables`: int32[sum of table sizes]
+## External Bytecode Representation
 
-Each `Op` is represented as follows:
-- `opcode`: int32
-- `id0`: int32
-- `id1`: int32
-- `data_higher`: int32
-- `data_lower`: int32
-- `dtype`: int32[3] (only (signed, integer_bits, fractional_bits) format for binary representation)
+`CombLogic.to_bytecode()` produces the int32 array consumed by the C++ ALIR interpreter. This is an in-memory interpreter format for python -> C++ communication, not a stable on-disk format. The bytecode is further converted to another internal bytecode format in the C++ interpreter for faster dispatch, which is not described here.
 
-The table block is represented as follows:
-- [`table_size`: int32] * `len(tables)`
-- [table data: int32[`table_size`]] * `len(tables)`
+The int32 array layout is:
 
-Each table is in the order of increasing index on the order of the smallest to largest inputs in the corresponding fixed-point representation. (**NOT** in the order of binary representation.)
+1. Header: `[spec_version, firmware_version, n_inputs, n_outputs, n_ops, n_tables]`.
+2. `inp_shifts`: `int32[n_inputs]`.
+3. `out_idxs`: `int32[n_outputs]`.
+4. `out_shifts`: `int32[n_outputs]`.
+5. `out_negs`: `int32[n_outputs]`.
+6. `ops`: `int32[n_ops, 8]`.
+7. `table_sizes`: `int32[n_tables]`.
+8. `table_data`: concatenated `int32` lookup table contents.
 
-In execution, the internal buffer **must** have larger bitwidth than the maximum bitwidth appears in any of the operations. When an operation implies quantization, the program **must** apply the quantization explicitly. When an operation does not imply quantization, the program **may** apply quantization and verify no value change is incurred as a result.
+Each bytecode operation row is:
 
-`_binary/alir/ALIRInterpreter.cc` and `_binary/alir/ALIRInterpreter.hh` contains a reference implementation of a ALIR interpreter in C++, which runs the program in a straightforward manner with `int64_t` for the internal buffer. The program is represented in a `int32_t` array, which can be obtained by `comb_logic.to_binary()`.
+1. `opcode`: `int32`.
+2. `id0`: `int32`.
+3. `id1`: `int32`.
+4. `data_low`: low 32 bits of `data`.
+5. `data_high`: high 32 bits of `data`.
+6. `signed`: output signedness.
+7. `integers`: integer bits excluding the sign bit.
+8. `fractionals`: fractional bits.
+
+Lookup table data is stored in increasing lookup-index order. The bytecode loader validates the ALIR spec version, bytecode length, causality, and the interpreter's current 64-bit intermediate-width limit.
+
+The JSON loader in the C++ interpreter accepts plain JSON and gzip-compressed JSON with the same `ALIRModel` wrapper used by `CombLogic.save()`.

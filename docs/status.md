@@ -1,6 +1,6 @@
 # Project Status
 
-alkaid is currently **beta** software and is under active development. Its core functionality is stable, but some features/API regarding tracing individual operations may change in future releases. We welcome contributions and feedback from the community through issues and pull requests.
+alkaid is under active development. The core ALIR format, CMVM optimization path, and RTL/HLS code generation flow are stable, but tracing support for individual framework operations may change as supported frontends expand.
 
 ```{note}
 It is advised to always verify the results produced from the generated code.
@@ -8,7 +8,7 @@ It is advised to always verify the results produced from the generated code.
 
 ## Supported Operations
 
-Most common high-level operations can be represented in [ALIR](alir.md) is supported, including but not limited to:
+Most common high-level operations that can be represented in [ALIR](alir.md) are supported, including:
  - Dense/Convolutional/EinsumDense layers
  - ReLU
  - max/minimum of two tensors; max/min pooling
@@ -20,5 +20,5 @@ Most common high-level operations can be represented in [ALIR](alir.md) is suppo
  - Bitwise operations (AND, OR, XOR, NOT, reduce-any, reduce-all)
 
 ```{note}
-An experimental [XLS](https://google.github.io/xls/) backend is available for generating Verilog through the XLS toolchain. See the [XLS backend documentation](xls.md) for details.
+An experimental [XLS](https://google.github.io/xls/) backend is available for JIT execution and Verilog generation through `xls-python`. See the [getting started guide](getting_started.md) for details.
 ```

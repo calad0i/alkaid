@@ -6,18 +6,12 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-import os
-import sys
-
 import alkaid
-
-sys.path.insert(0, os.path.abspath('../'))
 
 project = 'alkaid'
 copyright = '2025-2026, Chang Sun'
 author = 'Chang Sun'
 release = str(alkaid.__version__)
-version = release
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

@@ -1,6 +1,6 @@
 # Getting Started with alkaid
 
-alkaid can be used in multiple ways. When standalone code generation, it is recommended to use the functional API or HGQ2 integration. See [FAQ](faq.md) for more details on when to use which flow.
+alkaid can be used through the NumPy-like symbolic tracing API, through built-in framework tracers, or from serialized ALIR JSON/JSON.GZ. For standalone code generation, the functional API is the most direct path. For framework models, use the Keras or Torch tracer plugins when the operations in the model are supported.
 
 ## functional API:
 
@@ -47,16 +47,18 @@ rtl_model.write()
 # comb.predict(data_inp)
 ```
 
-## Using external plugins:
+## Using framework plugins:
 
-alkaid supports a plugin system for external frameworks. A plugin can implement the logic for tracing models defined in a specific framework (e.g., Keras3/HGQ2, PyTorch, etc.) and register itself under the `alir_tracer.plugins` entry point. When tracing a model, alkaid will automatically discover the appropriate plugin based on the model type and use it for tracing. See [Conversion Plugin](plugin.md) for more details. Below are some examples.
+alkaid discovers top-level model tracers from the `alir_tracer.plugins` entry-point group. The package registers built-in tracers for `keras`, `torch`, and the `alkaid` example model. The Keras and Torch tracers can also load operation or layer handlers from second-level entry-point groups named `alkaid_keras` and `alkaid_torch`.
+
+`trace_model()` chooses the top-level tracer from `type(model).__module__.split('.', 1)[0]` unless the `framework` argument is provided. See [Conversion Plugin](plugin.md) for the plugin contract and extension points.
 
 
 ## HGQ2/Keras3 integration:
 
-For models defined in [HGQ2](https://github.com/calad0i/HGQ2) (Keras3 based), alkaid can trace the model operations automatically when the supported layers/operations are used (i.e., most HGQ2 layers without general non-linear activations). In this way, one can easily convert existing HGQ2 models to HDL or HLS code in seconds. The plugin is built-in in HGQ2, so installing HGQ2 is sufficient to enable the integration. No additional configuration is needed.
+For models defined in [HGQ2](https://github.com/calad0i/HGQ2) (Keras 3 based), alkaid uses its built-in Keras tracer and can load HGQ-specific layer handlers through the `alkaid_keras` second-level plugin group. When the model uses supported layers and operations, it can be converted to HDL or HLS code in the same flow as a plain Keras model.
 
-> **Note**: HGQ2 support requires installing the [HGQ2](https://github.com/calad0i/HGQ2) package separately. HGQ2 registers its own `alir_tracer.plugins` entry point under the `keras` key, which alkaid discovers automatically. `trace_model()` auto-detects the framework from `type(model).__module__.split('.', 1)[0]`, so a Keras model resolves to `'keras'` and the HGQ2 plugin is used. See [Conversion Plugin](plugin.md) for how the plugin system works.
+> **Note**: HGQ2 is a separate package. Installing it provides the additional handlers needed for HGQ layers; the top-level `keras` tracer itself is provided by alkaid.
 
 ```python
 # alkaid with HGQ2
@@ -123,10 +125,10 @@ Note: only `CombLogic` is supported for HLS backends; `Pipeline` is not.
 
 
 ```{note}
-`xls-python`, a python binding for `libxls.so`, is required for the XLS backend. It can be installed from PyPI with `pip install xls-python`, but only available for Linux-x86_64 for the binary wheel. For other platforms, you may need to build `libxls` and `xls-python` from source.
+`xls-python`, a Python binding for XLS, is required for the XLS backend. It can be installed from PyPI with `pip install xls-python`; binary wheel availability is platform dependent, so other platforms may need a source build.
 ```
 
-For generating Verilog through [XLS](https://google.github.io/xls/), an experimental backend is available. This requires the `pyxls` package (experimental) to be installed separately.
+For generating Verilog through [XLS](https://google.github.io/xls/), an experimental backend is available.
 
 ```python
 from alkaid.codegen.xls import XLSModel
@@ -145,11 +147,12 @@ alkaid provides a command-line interface for common workflows:
 # Convert a Keras/HGQ2 model to an RTL project
 alkaid convert model.keras /tmp/rtl_output --flavor verilog --latency-cutoff 5
 
-# Convert a serialized ALIR model (JSON) to an RTL project
-alkaid convert model.json /tmp/rtl_output --flavor vhdl
+# Convert a serialized ALIR model to an RTL or HLS project
+alkaid convert model.json /tmp/rtl_output --flavor vhdl --n-stages 3
+alkaid convert model.json.gz /tmp/hls_output --flavor vitis
 
 # Generate a resource/timing report from an existing RTL project
-alkaid report /tmp/rtl_output
+alkaid report /tmp/rtl_output --sort-by comb_metric
 ```
 
 Use `alkaid convert --help` and `alkaid report --help` for full option details.

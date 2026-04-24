@@ -21,21 +21,21 @@ Distributed Arithmetic for Machine Learning
    :alt: alkaid-overview
    :width: 600
 
-alkaid is a light-weight high-level synthesis (HLS) compiler for generating low-latency, static-dataflow kernels for FPGAs. The main motivation of alkaid is to provide a simple and efficient way for machine learning practitioners requiring ultra-low latency to deploy their models on FPGAs quickly and easily, similar to hls4ml but with a much simpler design and better performance, both for the generated kernels and for the compilation process.
+alkaid is a lightweight compiler for generating low-latency, static-dataflow kernels for FPGAs. It traces quantized arithmetic graph into ALIR, applies distributed-arithmetic optimization through CMVM where useful, and emits RTL or HLS projects.
 
-As a static dataflow compiler, alkaid is specialized for kernels that are equivalent to a combinational or fully pipelined logic circuit, which means that the kernel has no loops or has only fully unrolled loops. There is no specific limitation on the types of operations that can be used in the kernel. For resource sharing and time-multiplexing, the users are expected to use the generated kernels as building blocks and manually assemble them into a larger design. In the future, we may employ a XLS-like design to automate the communication and buffer instantiation between kernels, but for now we will keep it simple and let the users have full control over the design.
+As a static-dataflow compiler, alkaid is specialized for kernels that are equivalent to combinational logic or an initiation-interval-one pipeline. The generated kernels are intended to be building blocks that users can compose into larger designs when resource sharing or time multiplexing is required.
 
-With DA in its name, alkaid do perform distributed arithmetic (DA) optimization to generate efficient kernels for linear DSP operations. The algorithm used is an efficient hybrid algorithm described in our [TRETS'25 paper](https://doi.org/10.1145/3777387). With DA optimization, any linear DSP operation can be implemented efficiently with only adders (i.e., fast accum and LUTs on FPGAs) without any hardened multipliers. If the user wishes, one can also control what multiplication pairs shall be excluded from DA optimization.
+With DA in its name, alkaid performs distributed-arithmetic (DA) optimization to generate efficient kernels for linear DSP operations. The algorithm is described in the `TRETS'25 paper <https://doi.org/10.1145/3777387>`_. With DA optimization, linear DSP operations can be implemented with adders and lookup tables instead of hardened multipliers; users can also exclude selected multiplication pairs from DA optimization.
 
 
 Installation
 ------------
 
-.. .. code-block:: bash
+.. code-block:: bash
 
-..    pip install alkaid
+   pip install alkaid
 
-Note: alkaid is now released as binary wheels on PyPI for Linux X86_64 and MacOS ARM64 platforms. For other platforms, please install from source. C++20 compliant compiler with OpenMP support is required to build alkaid from source. Windows is not officially supported, but you may try building it with MSVC or MinGW.
+Binary wheels are published for Linux x86_64 and macOS ARM64. Building from source requires Python 3.10 or newer, NumPy, meson-python, and a C++20 compiler with OpenMP support.
 
 
 Index
