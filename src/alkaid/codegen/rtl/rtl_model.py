@@ -108,8 +108,8 @@ class RTLModel:
 
         Parameters
         ----------
-        solution : CombLogic | Pipeline
-            The logic object represented in ALIR to be converted to RTL.
+        comb_logic : CombLogic
+            The ALIR combinational logic definition to be converted to RTL. If n_stages or latency_cutoff is specified, it will be automatically pipelined before codegen.
         path : str | Path
             The path to save the generated RTL project. The directory will be created if it does not exist.
         prj_name : str | None, optional
