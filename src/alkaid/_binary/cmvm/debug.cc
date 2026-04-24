@@ -15,8 +15,7 @@ int main(int argc, char *argv[]) {
     auto kernel = xt::random::randint({N, M}, -128, 128);
     auto kernel_f = xt::cast<float>(kernel);
     float t0 = clock();
-    volatile auto solution =
-        solve(kernel_f, "wmc", "auto", -1, -2, {}, {}, -1, -1, false);
+    volatile auto solution = solve(kernel_f, "wmc", "auto", -1, -2, {}, {}, -1, -1, false);
     float t1 = clock();
     std::cout << "Time: " << (t1 - t0) / CLOCKS_PER_SEC << "s" << std::endl;
     return 0;

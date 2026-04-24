@@ -6,8 +6,7 @@
 #include <algorithm>
 #include <array>
 
-QInterval
-qint_add(const QInterval &q0, const QInterval &q1, int64_t shift, bool sub0, bool sub1) {
+QInterval qint_add(const QInterval &q0, const QInterval &q1, int64_t shift, bool sub0, bool sub1) {
     float min0 = q0.min, max0 = q0.max, step0 = q0.step;
     float min1 = q1.min, max1 = q1.max, step1 = q1.step;
     if (sub0) {
@@ -29,8 +28,7 @@ qint_add(const QInterval &q0, const QInterval &q1, int64_t shift, bool sub0, boo
     return QInterval{min0 + min1, max0 + max1, std::min(step0, step1)};
 }
 
-std::pair<float, float>
-cost_add(const QInterval &q0, const QInterval &q1, int64_t shift) {
+std::pair<float, float> cost_add(const QInterval &q0, const QInterval &q1, int64_t shift) {
     auto [accum, overlap, tail] = overlap_counts(q0, q1, shift);
     if (overlap <= 0) {
         return {0, 0}; // bit concat
@@ -46,8 +44,7 @@ inline Pair _make_pair(int64_t id0, int64_t id1, int8_t v0, int8_t v1) {
         throw std::invalid_argument("id0 should be <= id1");
     }
     bool sub = SparseExpr::to_sign(v0) != SparseExpr::to_sign(v1);
-    int8_t shift =
-        static_cast<int8_t>(SparseExpr::to_shift(v1) - SparseExpr::to_shift(v0));
+    int8_t shift = static_cast<int8_t>(SparseExpr::to_shift(v1) - SparseExpr::to_shift(v0));
     return Pair{id0, id1, shift, sub};
 }
 
@@ -188,12 +185,10 @@ gather_matching_idxs(const DAState &state, const Pair &pair) {
 }
 
 Op pair_to_op(const Pair &pair, const DAState &state) {
-    auto [cost, dlat] =
-        cost_add(state.ops[pair.id0].qint, state.ops[pair.id1].qint, pair.shift);
+    auto [cost, dlat] = cost_add(state.ops[pair.id0].qint, state.ops[pair.id1].qint, pair.shift);
     float lat = std::max(state.ops[pair.id0].latency, state.ops[pair.id1].latency) + dlat;
-    QInterval qint = qint_add(
-        state.ops[pair.id0].qint, state.ops[pair.id1].qint, pair.shift, false, pair.sub
-    );
+    QInterval qint =
+        qint_add(state.ops[pair.id0].qint, state.ops[pair.id1].qint, pair.shift, false, pair.sub);
     return Op{pair.id0, pair.id1, (int64_t)pair.sub, pair.shift, qint, lat, cost};
 }
 
@@ -222,8 +217,7 @@ void update_expr(DAState &state, const Pair &pair) {
     for (size_t i_out = 0; i_out < n_out; ++i_out) {
         SparseExpr &expr0 = state.expr[id0];
         SparseExpr &expr1 = state.expr[id1];
-        for (int8_t bit_loc0 = 0; bit_loc0 < (int8_t)expr0.rows[i_out].size();
-             ++bit_loc0) {
+        for (int8_t bit_loc0 = 0; bit_loc0 < (int8_t)expr0.rows[i_out].size(); ++bit_loc0) {
             if (expr0.rows[i_out][bit_loc0] == 0)
                 continue; // marked for removal
             auto [shift0, sign0] = expr0.pos_sign(i_out, bit_loc0);
@@ -231,8 +225,7 @@ void update_expr(DAState &state, const Pair &pair) {
             int8_t bit_loc1 = expr1.to_idx(i_out, shift1);
             if (shift1 >= state.n_bits)
                 continue;
-            int8_t sign1 =
-                bit_loc1 >= 0 ? SparseExpr::to_sign(expr1.rows[i_out][bit_loc1]) : 0;
+            int8_t sign1 = bit_loc1 >= 0 ? SparseExpr::to_sign(expr1.rows[i_out][bit_loc1]) : 0;
             if (target_sign * sign1 * sign0 != 1)
                 continue;
 
@@ -280,8 +273,7 @@ void update_stats(DAState &state, const Pair &pair, bool partial) {
     for (size_t i_out = 0; i_out < n_out; ++i_out) {
         for (int64_t _in1 = 0; _in1 < n_constructed; ++_in1) {
             for (auto _in0 : modified) {
-                if ((_in1 == n_constructed - 1 || _in1 == id0 || _in1 == id1) &&
-                    _in0 > _in1)
+                if ((_in1 == n_constructed - 1 || _in1 == id0 || _in1 == id1) && _in0 > _in1)
                     continue;
 
                 int64_t lo = std::min(_in0, _in1);

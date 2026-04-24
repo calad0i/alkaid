@@ -28,12 +28,8 @@ nb::typed<nb::tuple, float, float> cost_add_numpy(
     const nb::typed<nb::tuple, float, float, float> &q1_obj,
     int64_t shift
 ) {
-    QInterval q0{
-        nb::cast<float>(q0_obj[0]), nb::cast<float>(q0_obj[1]), nb::cast<float>(q0_obj[2])
-    };
-    QInterval q1{
-        nb::cast<float>(q1_obj[0]), nb::cast<float>(q1_obj[1]), nb::cast<float>(q1_obj[2])
-    };
+    QInterval q0{nb::cast<float>(q0_obj[0]), nb::cast<float>(q0_obj[1]), nb::cast<float>(q0_obj[2])};
+    QInterval q1{nb::cast<float>(q1_obj[0]), nb::cast<float>(q1_obj[1]), nb::cast<float>(q1_obj[2])};
     auto [lat, cost] = cost_add(q0, q1, shift);
     return nb::make_tuple(lat, cost);
 }
@@ -50,9 +46,7 @@ nb::ndarray<nb::numpy, int32_t> minimal_kif_batch_numpy(
     const nb::ndarray<const double> &qsteps
 ) {
     if (qmins.size() != qmaxs.size() || qmins.size() != qsteps.size()) {
-        throw std::runtime_error(
-            "minimal_kif_batch: qmins/qmaxs/qsteps must have the same length"
-        );
+        throw std::runtime_error("minimal_kif_batch: qmins/qmaxs/qsteps must have the same length");
     }
     const size_t n = qmins.size();
     int32_t *out = new int32_t[n * 3];
@@ -68,18 +62,13 @@ nb::ndarray<nb::numpy, int8_t> int_arr_to_csd_numpy(const nb::ndarray<int32_t> &
     for (size_t i = 0; i < ndim; ++i) {
         shape[i] = in.shape(i);
     }
-    auto arr =
-        xt::adapt(const_cast<int32_t *>(in.data()), in.size(), xt::no_ownership(), shape);
+    auto arr = xt::adapt(const_cast<int32_t *>(in.data()), in.size(), xt::no_ownership(), shape);
     xt::xarray<int32_t> arr_cpy(arr);
     auto *result = new xt::xarray(_volatile_int_arr_to_csd(arr_cpy));
     auto *out_ptr = result->data();
-    nb::capsule owner(result, [](void *p) noexcept {
-        delete static_cast<xt::xarray<int8_t> *>(p);
-    });
+    nb::capsule owner(result, [](void *p) noexcept { delete static_cast<xt::xarray<int8_t> *>(p); });
     std::vector<size_t> out_shape(result->shape().begin(), result->shape().end());
-    return nb::ndarray<nb::numpy, int8_t>(
-        out_ptr, out_shape.size(), out_shape.data(), owner
-    );
+    return nb::ndarray<nb::numpy, int8_t>(out_ptr, out_shape.size(), out_shape.data(), owner);
 }
 
 nb::tuple csd_decompose_numpy(const nb::ndarray<float> &in, bool center) {
@@ -88,8 +77,7 @@ nb::tuple csd_decompose_numpy(const nb::ndarray<float> &in, bool center) {
     for (size_t i = 0; i < ndim; ++i) {
         shape[i] = in.shape(i);
     }
-    auto arr =
-        xt::adapt(const_cast<float *>(in.data()), in.size(), xt::no_ownership(), shape);
+    auto arr = xt::adapt(const_cast<float *>(in.data()), in.size(), xt::no_ownership(), shape);
 
     xt::xarray<float> arr_cpy(arr);
     auto [csd, shift0, shift1] = csd_decompose(arr_cpy, center);
@@ -149,14 +137,7 @@ static nb::object make_py_comblogic(const CombLogicResult &sol) {
 
     auto shape = nb::make_tuple(sol.shape.first, sol.shape.second);
     return CombLogic_cls(
-        shape,
-        inp_shifts,
-        out_idxs,
-        out_shifts,
-        out_negs,
-        ops,
-        sol.carry_size,
-        sol.adder_size
+        shape, inp_shifts, out_idxs, out_shifts, out_negs, ops, sol.carry_size, sol.adder_size
     );
 }
 
@@ -219,12 +200,8 @@ static nb::typed<nb::object, PyPipeline> solve_numpy(
     std::vector<size_t> shape(ndim);
     for (size_t i = 0; i < ndim; ++i)
         shape[i] = kernel_arr.shape(i);
-    auto kernel = xt::adapt(
-        const_cast<float *>(kernel_arr.data()),
-        kernel_arr.size(),
-        xt::no_ownership(),
-        shape
-    );
+    auto kernel =
+        xt::adapt(const_cast<float *>(kernel_arr.data()), kernel_arr.size(), xt::no_ownership(), shape);
 
     auto qintervals = extract_qintervals(qintervals_obj);
     auto latencies = extract_latencies(latencies_obj);
@@ -249,12 +226,8 @@ nb::typed<nb::tuple, int8_t, int8_t, int8_t> overlap_counts_(
     const nb::typed<nb::tuple, float, float, float> &q1_obj,
     int8_t shift1
 ) {
-    QInterval q0{
-        nb::cast<float>(q0_obj[0]), nb::cast<float>(q0_obj[1]), nb::cast<float>(q0_obj[2])
-    };
-    QInterval q1{
-        nb::cast<float>(q1_obj[0]), nb::cast<float>(q1_obj[1]), nb::cast<float>(q1_obj[2])
-    };
+    QInterval q0{nb::cast<float>(q0_obj[0]), nb::cast<float>(q0_obj[1]), nb::cast<float>(q0_obj[2])};
+    QInterval q1{nb::cast<float>(q1_obj[0]), nb::cast<float>(q1_obj[1]), nb::cast<float>(q1_obj[2])};
     auto [a, b, c] = overlap_counts(q0, q1, shift1);
     return nb::make_tuple(a, b, c);
 }
@@ -266,9 +239,7 @@ nb::ndarray<nb::numpy, int8_t> get_lsb_loc_arr(nb::ndarray<float> arr) {
         ret_ptr[i] = get_lsb_loc(ptr[i]);
     }
     nb::capsule owner(ret_ptr, [](void *p) noexcept { delete[] (int8_t *)(p); });
-    return nb::ndarray<nb::numpy, int8_t>(
-        ret_ptr, arr.ndim(), (size_t *)(arr.shape_ptr()), owner
-    );
+    return nb::ndarray<nb::numpy, int8_t>(ret_ptr, arr.ndim(), (size_t *)(arr.shape_ptr()), owner);
 }
 
 NB_MODULE(cmvm_bin, m) {
@@ -276,11 +247,7 @@ NB_MODULE(cmvm_bin, m) {
     m.def("get_lsb_loc", &get_lsb_loc, "x"_a);
     m.def("get_lsb_loc_arr", &get_lsb_loc_arr, "x"_a);
     m.def("iceil_log2", &iceil_log2, "x"_a);
-    m.def(
-        "minimal_kif_scalar",
-        &minimal_kif_scalar_numpy,
-        "qmin"_a, "qmax"_a, "qstep"_a
-    );
+    m.def("minimal_kif_scalar", &minimal_kif_scalar_numpy, "qmin"_a, "qmax"_a, "qstep"_a);
     m.def(
         "minimal_kif_batch",
         &minimal_kif_batch_numpy,
@@ -289,9 +256,7 @@ NB_MODULE(cmvm_bin, m) {
         "qsteps"_a.noconvert()
     );
     m.def("csd_decompose", &csd_decompose_numpy, "inp"_a.noconvert(), "center"_a = true);
-    m.def(
-        "kernel_decompose", &kernel_decompose_numpy, "kernel"_a.noconvert(), "dc"_a = -2
-    );
+    m.def("kernel_decompose", &kernel_decompose_numpy, "kernel"_a.noconvert(), "dc"_a = -2);
     m.def(
         "solve",
         &solve_numpy,

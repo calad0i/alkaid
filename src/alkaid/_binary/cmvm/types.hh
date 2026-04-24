@@ -86,11 +86,9 @@ class FreqMap {
                 count = 1;
             }
         };
-        std::sort(
-            new_entries.begin(),
-            new_entries.end(),
-            [](const value_type &a, const value_type &b) { return a.first < b.first; }
-        );
+        std::sort(new_entries.begin(), new_entries.end(), [](const value_type &a, const value_type &b) {
+            return a.first < b.first;
+        });
         merge_sorted(new_entries);
     }
 
@@ -121,10 +119,7 @@ class SparseExpr {
         rows[i_out][j_bit] = 0; // sentinel for removal
     }
     void compact(size_t i_out) {
-        rows[i_out].erase(
-            std::remove(rows[i_out].begin(), rows[i_out].end(), (int8_t)0),
-            rows[i_out].end()
-        );
+        rows[i_out].erase(std::remove(rows[i_out].begin(), rows[i_out].end(), (int8_t)0), rows[i_out].end());
     }
     void compact_all() {
         for (auto &r : rows) {

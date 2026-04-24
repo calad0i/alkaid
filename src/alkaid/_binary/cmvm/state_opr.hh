@@ -4,13 +4,8 @@
 #include <vector>
 #include <tuple>
 
-QInterval qint_add(
-    const QInterval &q0,
-    const QInterval &q1,
-    int64_t shift,
-    bool sub0 = false,
-    bool sub1 = false
-);
+QInterval
+qint_add(const QInterval &q0, const QInterval &q1, int64_t shift, bool sub0 = false, bool sub1 = false);
 
 std::pair<float, float> cost_add(const QInterval &q0, const QInterval &q1, int64_t shift);
 

@@ -79,9 +79,7 @@ struct HeapEntry {
     int64_t id;
     int64_t shift;
 
-    auto as_tuple() const {
-        return std::tie(lat, sub, left_align, qmin, qmax, qstep, id, shift);
-    }
+    auto as_tuple() const { return std::tie(lat, sub, left_align, qmin, qmax, qstep, id, shift); }
     bool operator>(const HeapEntry &o) const { return as_tuple() > o.as_tuple(); }
 };
 
@@ -129,18 +127,14 @@ CombLogicResult to_solution(const DAState &state, bool partial) {
 
         // Build heap entries
         // Min-heap using std::greater
-        std::priority_queue<HeapEntry, std::vector<HeapEntry>, std::greater<HeapEntry>>
-            heap;
+        std::priority_queue<HeapEntry, std::vector<HeapEntry>, std::greater<HeapEntry>> heap;
         for (size_t k = 0; k < idx.size(); ++k) {
             auto &qint = ops[idx[k]].qint;
             float lat = roundf(ops[idx[k]].latency);
-            int64_t n_int = static_cast<int64_t>(
-                std::log2(std::max(std::abs(qint.max + qint.step), std::abs(qint.min)))
-            );
+            int64_t n_int =
+                static_cast<int64_t>(std::log2(std::max(std::abs(qint.max + qint.step), std::abs(qint.min))));
             int64_t la = n_int + shifts[k];
-            heap.push(
-                {lat, sub_vals[k], la, qint.min, qint.max, qint.step, idx[k], shifts[k]}
-            );
+            heap.push({lat, sub_vals[k], la, qint.min, qint.max, qint.step, idx[k], shifts[k]});
         }
 
         while (heap.size() > 1) {
@@ -177,21 +171,12 @@ CombLogicResult to_solution(const DAState &state, bool partial) {
                 result_shift = shift0;
             }
 
-            int64_t la = static_cast<int64_t>(std::log2(
-                             std::max(std::abs(qint.max + qint.step), std::abs(qint.min))
-                         )) +
+            int64_t la = static_cast<int64_t>(
+                             std::log2(std::max(std::abs(qint.max + qint.step), std::abs(qint.min)))
+                         ) +
                          result_shift;
             float lat = roundf(op.latency);
-            heap.push(
-                {lat,
-                 sub0 & sub1,
-                 la,
-                 qint.min,
-                 qint.max,
-                 qint.step,
-                 _global_id,
-                 result_shift}
-            );
+            heap.push({lat, sub0 & sub1, la, qint.min, qint.max, qint.step, _global_id, result_shift});
             ops.push_back(op);
             _global_id++;
         }
@@ -203,10 +188,7 @@ CombLogicResult to_solution(const DAState &state, bool partial) {
     }
 
     CombLogicResult result;
-    result.shape = {
-        static_cast<int64_t>(state.kernel.shape(0)),
-        static_cast<int64_t>(state.kernel.shape(1))
-    };
+    result.shape = {static_cast<int64_t>(state.kernel.shape(0)), static_cast<int64_t>(state.kernel.shape(1))};
     result.inp_shifts = std::move(inp_shifts);
     result.out_idxs = std::move(out_idxs);
     result.out_shifts = std::move(out_shifts_vec);

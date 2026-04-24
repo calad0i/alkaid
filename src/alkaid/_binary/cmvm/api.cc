@@ -105,9 +105,7 @@ PipelineResult _solve(
                 qintervals0.push_back(sol0.ops[idx].qint);
             }
             else {
-                qintervals0.push_back(
-                    QInterval{0.0, 0.0, std::numeric_limits<float>::infinity()}
-                );
+                qintervals0.push_back(QInterval{0.0, 0.0, std::numeric_limits<float>::infinity()});
             }
         }
 
@@ -169,18 +167,15 @@ PipelineResult solve(
     }
 
     if (!search_all_decompose_dc) {
-        return _solve(
-            kernel, method0, method1, hard_dc, decompose_dc, qintervals, latencies, partial
-        );
+        return _solve(kernel, method0, method1, hard_dc, decompose_dc, qintervals, latencies, partial);
     }
 
     int _hard_dc = hard_dc;
     if (_hard_dc < 0)
         _hard_dc = std::numeric_limits<int>::max();
 
-    int max_decompose_dc = std::min(
-        _hard_dc, static_cast<int>(std::ceil(std::log2(static_cast<float>(n_in))))
-    );
+    int max_decompose_dc =
+        std::min(_hard_dc, static_cast<int>(std::ceil(std::log2(static_cast<float>(n_in)))));
 
     std::vector<int> try_dcs;
     for (int d = 0; d <= max_decompose_dc; ++d) {
@@ -195,16 +190,8 @@ PipelineResult solve(
 #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < n_tries; ++i) {
         try {
-            auto _csol = _solve(
-                kernel,
-                method0,
-                method1,
-                _hard_dc,
-                try_dcs[i],
-                qintervals,
-                latencies,
-                partial
-            );
+            auto _csol =
+                _solve(kernel, method0, method1, _hard_dc, try_dcs[i], qintervals, latencies, partial);
             float _cost = 0.0;
             for (auto &sol : _csol.solutions) {
                 for (auto &op : sol.ops) {

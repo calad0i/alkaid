@@ -18,14 +18,8 @@ inline int8_t iceil_log2(float x) {
 
 // Scalar minimal_kif. Uses llrint (FE_TONEAREST) to match Python's round().
 // The float32 cast in iceil_log2 is load-bearing — see iceil_log2 above.
-inline void minimal_kif_one(
-    double qmin,
-    double qmax,
-    double qstep,
-    int32_t &out_k,
-    int32_t &out_i,
-    int32_t &out_f
-) {
+inline void
+minimal_kif_one(double qmin, double qmax, double qstep, int32_t &out_k, int32_t &out_i, int32_t &out_f) {
     if (qmin == 0.0 && qmax == 0.0) {
         out_k = 0;
         out_i = 0;
@@ -45,16 +39,9 @@ inline void minimal_kif_one(
 }
 
 // Writes n × 3 int32: [keep_negative, integers, fractionals] per entry.
-inline void minimal_kif_batch(
-    const double *qmins,
-    const double *qmaxs,
-    const double *qsteps,
-    int32_t *out,
-    size_t n
-) {
+inline void
+minimal_kif_batch(const double *qmins, const double *qmaxs, const double *qsteps, int32_t *out, size_t n) {
     for (size_t i = 0; i < n; ++i) {
-        minimal_kif_one(
-            qmins[i], qmaxs[i], qsteps[i], out[3 * i], out[3 * i + 1], out[3 * i + 2]
-        );
+        minimal_kif_one(qmins[i], qmaxs[i], qsteps[i], out[3 * i], out[3 * i + 1], out[3 * i + 2]);
     }
 }

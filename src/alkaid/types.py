@@ -16,7 +16,7 @@ from ._binary import (
     minimal_kif_scalar,
 )
 
-ALIR_SPEC_VERSION = 3
+ALIR_SPEC_VERSION = 2
 
 
 if TYPE_CHECKING:

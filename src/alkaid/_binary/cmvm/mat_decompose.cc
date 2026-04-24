@@ -5,8 +5,7 @@
 
 xt::xarray<int32_t> prim_mst_dc(const xt::xarray<int64_t> &cost_mat, int dc) {
     size_t N = cost_mat.shape(0);
-    auto lat_mat =
-        xt::cast<float>(xt::ceil(xt::log2(xt::cast<float>(xt::maximum(cost_mat, 1)))));
+    auto lat_mat = xt::cast<float>(xt::ceil(xt::log2(xt::cast<float>(xt::maximum(cost_mat, 1)))));
     std::vector<int32_t> parent(N, -2);
     parent[0] = -1;
 
@@ -59,8 +58,7 @@ xt::xarray<int32_t> prim_mst_dc(const xt::xarray<int64_t> &cost_mat, int dc) {
     return mapping;
 }
 
-std::pair<xt::xarray<float>, xt::xarray<float>>
-kernel_decompose(xt::xarray<float> kernel, int dc) {
+std::pair<xt::xarray<float>, xt::xarray<float>> kernel_decompose(xt::xarray<float> kernel, int dc) {
     auto [centered, shift0, shift1] = _center(kernel);
     auto scale0 = xt::pow(2.0f, xt::cast<float>(shift0));
     auto scale1 = xt::pow(2.0f, xt::cast<float>(shift1));
@@ -83,13 +81,10 @@ kernel_decompose(xt::xarray<float> kernel, int dc) {
     auto csd0 = _volatile_int_arr_to_csd(diff0_int);
     auto csd1 = _volatile_int_arr_to_csd(diff1_int);
     // Sum of non-zero bits over last axis (bit dimension) and first axis (input dimension)
-    auto dist0 =
-        xt::sum(xt::sum(xt::cast<int64_t>(xt::not_equal(csd0, int8_t(0))), {3}), {0});
-    auto dist1 =
-        xt::sum(xt::sum(xt::cast<int64_t>(xt::not_equal(csd1, int8_t(0))), {3}), {0});
+    auto dist0 = xt::sum(xt::sum(xt::cast<int64_t>(xt::not_equal(csd0, int8_t(0))), {3}), {0});
+    auto dist1 = xt::sum(xt::sum(xt::cast<int64_t>(xt::not_equal(csd1, int8_t(0))), {3}), {0});
 
-    auto sign_arr =
-        xt::where(dist1 - dist0 < 0, xt::xarray<int64_t>({-1}), xt::xarray<int64_t>({1}));
+    auto sign_arr = xt::where(dist1 - dist0 < 0, xt::xarray<int64_t>({-1}), xt::xarray<int64_t>({1}));
     xt::xarray<int64_t> dist = xt::minimum(dist0, dist1);
 
     auto mapping_arr = prim_mst_dc(dist, dc);
@@ -111,13 +106,11 @@ kernel_decompose(xt::xarray<float> kernel, int dc) {
         int32_t _from = mapping_arr(k, 0);
         int32_t _to = mapping_arr(k, 1);
         auto col0 = xt::view(mat_aug, xt::all(), _to) -
-                    xt::view(mat_aug, xt::all(), _from) *
-                        static_cast<float>(sign_arr(_to, _from));
+                    xt::view(mat_aug, xt::all(), _from) * static_cast<float>(sign_arr(_to, _from));
 
         xt::xarray<float> col1;
         if (_from != 0) {
-            col1 = xt::view(m1, xt::all(), _from - 1) *
-                   static_cast<float>(sign_arr(_to, _from));
+            col1 = xt::view(m1, xt::all(), _from - 1) * static_cast<float>(sign_arr(_to, _from));
         }
         else {
             col1 = xt::zeros<float>({n_out});
@@ -142,28 +135,19 @@ nb::tuple kernel_decompose_numpy(const nb::ndarray<float> &in, int dc) {
     for (size_t i = 0; i < ndim; ++i)
         shape[i] = in.shape(i);
 
-    auto arr =
-        xt::adapt(const_cast<float *>(in.data()), in.size(), xt::no_ownership(), shape);
+    auto arr = xt::adapt(const_cast<float *>(in.data()), in.size(), xt::no_ownership(), shape);
     auto [m0, m1] = kernel_decompose(xt::xarray<float>(arr), dc);
 
     auto *m0_ptr = new xt::xarray<float>(m0);
     auto *m1_ptr = new xt::xarray<float>(m1);
 
-    nb::capsule m0_owner(m0_ptr, [](void *p) noexcept {
-        delete static_cast<xt::xarray<float> *>(p);
-    });
-    nb::capsule m1_owner(m1_ptr, [](void *p) noexcept {
-        delete static_cast<xt::xarray<float> *>(p);
-    });
+    nb::capsule m0_owner(m0_ptr, [](void *p) noexcept { delete static_cast<xt::xarray<float> *>(p); });
+    nb::capsule m1_owner(m1_ptr, [](void *p) noexcept { delete static_cast<xt::xarray<float> *>(p); });
 
     std::vector<size_t> m0_shape(m0.shape().begin(), m0.shape().end());
     std::vector<size_t> m1_shape(m1.shape().begin(), m1.shape().end());
 
-    nb::ndarray<nb::numpy, float> m0_out(
-        m0_ptr->data(), m0_shape.size(), m0_shape.data(), m0_owner
-    );
-    nb::ndarray<nb::numpy, float> m1_out(
-        m1_ptr->data(), m1_shape.size(), m1_shape.data(), m1_owner
-    );
+    nb::ndarray<nb::numpy, float> m0_out(m0_ptr->data(), m0_shape.size(), m0_shape.data(), m0_owner);
+    nb::ndarray<nb::numpy, float> m1_out(m1_ptr->data(), m1_shape.size(), m1_shape.data(), m1_owner);
     return nb::make_tuple(m0_out, m1_out);
 }
