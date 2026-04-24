@@ -128,7 +128,7 @@ class HLSModel:
             pass
 
         # Dump the comb logic
-        self._solution.save(self._path / 'model/comb.json')
+        self._solution.save(self._path / 'model/comb.json.gz')
 
         # Out-of-context top fn and its header
         inp_type, out_type = get_io_types(self._solution, self._flavor)

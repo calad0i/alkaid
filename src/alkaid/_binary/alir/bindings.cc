@@ -241,7 +241,7 @@ static nb::ndarray<nb::numpy, double> run_interp_numpy(
     }
 
     alir::ALIRInterpreter interp;
-    interp.load_from_binary(std::span<const int32_t>(bin_logic_ptr, bin_logic.size()));
+    interp.load_from_bytecode(std::span<const int32_t>(bin_logic_ptr, bin_logic.size()));
 
     const size_t n_samples = input.size() / interp.get_n_in();
     const size_t n_out = dump ? interp.get_n_ops() : interp.get_n_out();

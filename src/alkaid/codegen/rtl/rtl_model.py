@@ -92,7 +92,7 @@ def verilog_comb_logic_gen_xls(sol: CombLogic, fn_name: str, print_latency: bool
 class RTLModel:
     def __init__(
         self,
-        logic: CombLogic | Pipeline,
+        comb_logic: CombLogic,
         path: str | Path,
         prj_name: str | None = None,
         flavor: str = 'verilog',
@@ -133,7 +133,7 @@ class RTLModel:
             Minimum and maximum IO delay in ns used in default OOC scripts. Default is (0.2, 0.4).
         """
         self._flavor = flavor.lower()
-        self._solution = logic
+        self._comb = comb_logic
         self._path = Path(path).resolve()
         self._prj_name = prj_name or canon_name(self._path.stem)
         self._n_stages = n_stages
@@ -145,16 +145,15 @@ class RTLModel:
         self._clock_uncertainty = clock_uncertainty
         self._io_delay_minmax = io_delay_minmax
         self._place_holder = False
+        self._pipe: Pipeline | None = None
 
         assert self._flavor in ('vhdl', 'verilog'), f'Unsupported flavor {flavor}, only vhdl and verilog are supported.'
-
-        self._pipe = logic if isinstance(logic, Pipeline) else None
 
         if (latency_cutoff > 0 or n_stages > 0) and self._pipe is None:
             _latency_cutoff = latency_cutoff if latency_cutoff > 0 else None
             _n_stages = n_stages if n_stages > 0 else None
-            assert isinstance(logic, CombLogic)
-            self._pipe = to_pipeline(logic, _n_stages, _latency_cutoff, verbose=False)
+            assert isinstance(comb_logic, CombLogic)
+            self._pipe = to_pipeline(comb_logic, _n_stages, _latency_cutoff, verbose=False)
 
         if self._pipe is not None:
             # get actual latency cutoff
@@ -209,12 +208,9 @@ class RTLModel:
             with open(self._path / path.name, 'w') as f:
                 f.write(tcl)
 
-        if isinstance(self._solution, CombLogic):
-            self._solution.save(self._path / 'model/comb.json')
+        self._comb.save(self._path / 'model/comb.json.gz')
 
         if self._pipe is not None:  # Pipeline
-            self._pipe.save(self._path / 'model/pipeline.json')
-
             if not self._place_holder:
                 # Main logic
                 codes = pipeline_logic_gen(
@@ -254,22 +250,22 @@ class RTLModel:
             # Verilog IO wrapper (non-uniform bw to uniform one, clk passthrough)
             io_wrapper = generate_io_wrapper(self._pipe, self._prj_name, True)
         else:  # Comb
-            assert isinstance(self._solution, CombLogic)
+            assert isinstance(self._comb, CombLogic)
 
             if not self._place_holder:
                 # Table memory files
-                memfiles = table_mem_gen(self._solution)
+                memfiles = table_mem_gen(self._comb)
 
                 # Main logic
-                code = comb_logic_gen(self._solution, self._prj_name, self._print_latency, '`timescale 1ns/1ps')
+                code = comb_logic_gen(self._comb, self._prj_name, self._print_latency, '`timescale 1ns/1ps')
                 with open(self._path / f'src/{self._prj_name}.{suffix}', 'w') as f:
                     f.write(code)
             else:
                 memfiles = {}
 
             # Verilog IO wrapper (non-uniform bw to uniform one, no clk)
-            io_wrapper = generate_io_wrapper(self._solution, self._prj_name, False)
-            binder = binder_gen(self._solution, f'{self._prj_name}_wrapper')
+            io_wrapper = generate_io_wrapper(self._comb, self._prj_name, False)
+            binder = binder_gen(self._comb, f'{self._prj_name}_wrapper')
 
         # Write table memory files
         for name, mem in memfiles.items():
@@ -290,11 +286,11 @@ class RTLModel:
         shutil.copy(self.__src_root / 'common_source/binder_util.hh', self._path / 'sim')
 
         _metadata = {
-            'cost': self._solution.cost,
+            'cost': self._comb.cost,
             'flavor': self._flavor,
             'part_name': self._part_name,
         }
-        _comb = self._solution if isinstance(self._solution, CombLogic) else self._solution.solutions[0]
+        _comb = self._comb if isinstance(self._comb, CombLogic) else self._comb.solutions[0]
         _metadata['adder_size'] = _comb.adder_size
         _metadata['carry_size'] = _comb.carry_size
         if self._pipe is not None:
@@ -458,12 +454,12 @@ class RTLModel:
             data = np.concatenate([a.reshape(a.shape[0], -1) for a in data], axis=-1)
 
         assert self._lib is not None, 'Library not loaded, call .compile() first.'
-        inp_size, out_size = self._solution.shape
+        inp_size, out_size = self._comb.shape
 
         assert data.size % inp_size == 0, f'Input size {data.size} is not divisible by {inp_size}'
         n_sample = data.size // inp_size
 
-        kifs_in, kifs_out = get_io_kifs(self._solution)
+        kifs_in, kifs_out = get_io_kifs(self._comb)
         k_in, i_in, f_in = map(np.max, kifs_in)
         k_out, i_out, f_out = map(np.max, kifs_out)
         assert k_in + i_in + f_in <= 32, "Padded inp bw doesn't fit in int32. Emulation not supported"
@@ -490,9 +486,9 @@ class RTLModel:
         return ((out_data.reshape(n_sample, out_size) + b) % a - b) * c.astype(np.float32)
 
     def __repr__(self):
-        inp_size, out_size = self._solution.shape
-        cost = round(self._solution.cost)
-        kifs_in, kifs_out = get_io_kifs(self._solution)
+        inp_size, out_size = self._comb.shape
+        cost = round(self._comb.cost)
+        kifs_in, kifs_out = get_io_kifs(self._comb)
         in_bits, out_bits = np.sum(kifs_in), np.sum(kifs_out)
         if self._pipe is not None:
             n_stage = len(self._pipe[0])
@@ -506,7 +502,7 @@ Estimated cost: {cost} LUTs, {reg_bits} FFs"""
         else:
             spec = f"""Top Module: {self._prj_name}\n====================
 {inp_size} ({in_bits} bits) -> {out_size} ({out_bits} bits)
-combinational @ delay={self._solution.latency}
+combinational @ delay={self._comb.latency}
 Estimated cost: {cost} LUTs"""
 
         is_compiled = self._lib is not None

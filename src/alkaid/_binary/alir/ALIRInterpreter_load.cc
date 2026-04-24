@@ -1,13 +1,12 @@
 #include "ALIRInterpreter.hh"
 
 #include <cstring>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 
 namespace alir {
 
-    void ALIRInterpreter::load_from_binary(const std::span<const int32_t> &binary_data) {
+    void ALIRInterpreter::load_from_bytecode(const std::span<const int32_t> &binary_data) {
         if (binary_data.size() < 6) {
             throw std::runtime_error("Binary data too small to contain valid ALIR model file");
         }
@@ -109,23 +108,6 @@ namespace alir {
         }
 
         build_exec_program(ops);
-    }
-
-    void ALIRInterpreter::load_from_file(const std::string &path) {
-        std::ifstream file(path, std::ios::binary);
-        if (!file)
-            throw std::runtime_error("Failed to open file: " + path);
-
-        file.seekg(0, std::ios::end);
-        size_t file_size = file.tellg();
-        file.seekg(0, std::ios::beg);
-        if (file_size % sizeof(int32_t) != 0)
-            throw std::runtime_error("File size is not a multiple of int32_t size");
-        if (file_size < 3 * sizeof(int32_t))
-            throw std::runtime_error("File size is too small to contain valid ALIR model file");
-        std::vector<int32_t> binary_data(file_size / sizeof(int32_t));
-        file.read(reinterpret_cast<char *>(binary_data.data()), file_size);
-        load_from_binary(binary_data);
     }
 
     void ALIRInterpreter::print_program_info() const {

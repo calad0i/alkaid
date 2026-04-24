@@ -1,3 +1,4 @@
+import gzip
 import json
 import os
 from collections.abc import Sequence
@@ -440,8 +441,6 @@ class CombLogic(NamedTuple):
         dump = {'model': self, 'meta': 'ALIRModel', 'spec_version': ALIR_SPEC_VERSION}
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         if str(path).endswith('.gz'):
-            import gzip
-
             with gzip.open(path, 'wt', encoding='utf-8', compresslevel=compresslevel) as f:
                 json.dump(dump, f, cls=JSONEncoder, separators=(',', ':'))
         else:
@@ -489,8 +488,6 @@ class CombLogic(NamedTuple):
             head = fb.read(2)
             fb.seek(0)
             if head == b'\x1f\x8b':  # gzip magic bytes
-                import gzip
-
                 data = json.loads(gzip.decompress(fb.read()).decode('utf-8'))
             else:
                 data = json.loads(fb.read().decode('utf-8'))
@@ -517,7 +514,8 @@ class CombLogic(NamedTuple):
             ref_count[i] += 1
         return ref_count
 
-    def to_binary(self, version: int = 0) -> NDArray[np.int32]:
+    def to_bytecode(self, version: int = 0) -> NDArray[np.int32]:
+        """Ephemeral bytecode format for passing to the C++ ALIR interpreter."""
         n_in, n_out = self.shape
         header_size_i32 = 6 + n_in + n_out * 3
         n_ops = len(self.ops)
@@ -570,12 +568,6 @@ class CombLogic(NamedTuple):
         data = np.concatenate([data, table_data])
         return data
 
-    def save_binary(self, path: str | Path, version: int = 0):
-        """Dump the solution to a binary file."""
-        data = self.to_binary(version=version)
-        with open(path, 'wb') as f:
-            data.tofile(f)
-
     def predict(self, data: NDArray | Sequence[NDArray], n_threads: int = 0, debug=False, dump=False) -> NDArray[np.float64]:
         """Predict the output of the solution for a batch of input data with cpp backed ALIR interpreter.
         Cannot be used if the binary interpreter is not installed.
@@ -603,7 +595,7 @@ class CombLogic(NamedTuple):
             data = np.concatenate([a.reshape(a.shape[0], -1) for a in data], axis=-1)
         if n_threads <= 0:
             n_threads = int(os.environ.get('DA_DEFAULT_THREADS', 0))
-        bin_logic = self.to_binary()
+        bin_logic = self.to_bytecode()
         return alir_interp_run(bin_logic, data, n_threads, dump=dump)
 
 
@@ -701,12 +693,6 @@ class Pipeline(NamedTuple):
         lat_min, lat_max = self.latency
         return f'CascatedSolution([{shape_str}], cost={_cost}, latency={lat_min}-{lat_max})'
 
-    def save(self, path: str | Path):
-        """Save the solution to a file."""
-        dump = {'model': self, 'meta': 'ALIRPipeline', 'spec_version': ALIR_SPEC_VERSION}
-        with open(path, 'w') as f:
-            json.dump(dump, f, cls=JSONEncoder, separators=(',', ':'))
-
     @classmethod
     def from_dict(cls, data: dict, raw=False):
         if not raw:
@@ -717,13 +703,6 @@ class Pipeline(NamedTuple):
         data = data['model'] if not raw else data
 
         return cls(solutions=tuple(CombLogic.from_dict(sol, raw=True) for sol in data[0]))
-
-    @classmethod
-    def load(cls, path: str):
-        """Load the solution from a file."""
-        with open(path) as f:
-            data = json.load(f)
-        return cls.from_dict(data)
 
     @property
     def reg_bits(self):

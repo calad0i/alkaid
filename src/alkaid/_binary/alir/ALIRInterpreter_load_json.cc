@@ -30,11 +30,6 @@ namespace alir {
     } // anonymous namespace
 
     void ALIRInterpreter::load_from_json_string(std::string_view s) {
-        std::string decompressed;
-        if (is_gzip_magic(s.data(), s.size())) {
-            decompressed = gzip_inflate(s.data(), s.size());
-            s = decompressed;
-        }
         json doc = json::parse(s);
         if (!doc.contains("spec_version") || doc["spec_version"].get<int>() != alir_version) {
             throw std::runtime_error(
@@ -124,8 +119,7 @@ namespace alir {
             }
         }
 
-        // Opcode 8 packs pad_left (derived from the input op's qint) into
-        // data_high. Python to_binary does the same.
+        // Opcode 8 packs pad_left (derived from the input op's qint) into data_high.
         for (size_t i = 0; i < n_ops; ++i) {
             Op &op = ops[i];
             if (op.opcode != 8)
@@ -192,7 +186,15 @@ namespace alir {
             throw std::runtime_error("Failed to open JSON file: " + path);
         std::stringstream ss;
         ss << f.rdbuf();
-        load_from_json_string(ss.str());
+        std::string s = ss.str();
+        std::string decompressed;
+        if (is_gzip_magic(s.data(), s.size())) {
+            decompressed = gzip_inflate(s.data(), s.size());
+        }
+        else {
+            decompressed = std::move(s);
+        }
+        load_from_json_string(decompressed);
     }
 
 } // namespace alir

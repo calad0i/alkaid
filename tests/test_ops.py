@@ -4,11 +4,11 @@ import subprocess
 import numpy as np
 import pytest
 
+from alkaid._binary import alir_interp_run_json_file
 from alkaid.codegen import HLSModel, RTLModel
 from alkaid.trace import FVArray, trace
 from alkaid.trace.ops import quantize, relu
 from alkaid.trace.passes import optimize
-from alkaid.trace.pipeline import Pipeline, to_pipeline
 from alkaid.types import CombLogic
 
 
@@ -69,24 +69,19 @@ class OperationTest:
             _comb.save('/tmp/3.json')
         assert comb == comb2
 
-    def test_serialization(self, comb: CombLogic, temp_directory: str):
+    def test_serialization(self, comb: CombLogic, temp_directory: str, test_data: np.ndarray):
         comb.save(f'{temp_directory}/comb.json')
         comb.save(f'{temp_directory}/comb.json.gz')
         comb2 = CombLogic.load(f'{temp_directory}/comb.json')
         comb3 = CombLogic.load(f'{temp_directory}/comb.json.gz')
         assert comb == comb2 and comb == comb3
 
-    def test_pipe_serialization(self, comb: CombLogic, temp_directory: str):
-        pipe = to_pipeline(comb, 2, verbose=True)
-        pipe.save(f'{temp_directory}/pipe.json')
-        pipe2 = Pipeline.load(f'{temp_directory}/pipe.json')
-        assert pipe == pipe2
-        assert pipe.latency == comb.latency
-        assert pipe.inp_latency == comb.inp_latency
-        assert pipe.out_latency == comb.out_latency
-        assert pipe.inp_shifts == comb.inp_shifts
-        assert pipe.out_shifts == comb.out_shifts
-        assert pipe.out_negs == comb.out_negs
+        pred = comb.predict(test_data[:1000])
+        pred2 = alir_interp_run_json_file(f'{temp_directory}/comb.json', test_data[:1000])
+        pred3 = alir_interp_run_json_file(f'{temp_directory}/comb.json.gz', test_data[:1000])
+
+        np.testing.assert_equal(pred, pred2)
+        np.testing.assert_equal(pred, pred3)
 
 
 class OperationTestSynth(OperationTest):

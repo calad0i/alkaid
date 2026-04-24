@@ -110,4 +110,4 @@ Each table is in the order of increasing index on the order of the smallest to l
 
 In execution, the internal buffer **must** have larger bitwidth than the maximum bitwidth appears in any of the operations. When an operation implies quantization, the program **must** apply the quantization explicitly. When an operation does not imply quantization, the program **may** apply quantization and verify no value change is incurred as a result.
 
-`_binary/alir/ALIRInterpreter.cc` and `_binary/alir/ALIRInterpreter.hh` contains a reference implementation of a ALIR interpreter in C++, which runs the program in a straightforward manner with `int64_t` for the internal buffer. The program is represented in a `int32_t` array, which can be obtained by `comb_logic.to_binary()` or `comb_logic.save_binary(path)`.
+`_binary/alir/ALIRInterpreter.cc` and `_binary/alir/ALIRInterpreter.hh` contains a reference implementation of a ALIR interpreter in C++, which runs the program in a straightforward manner with `int64_t` for the internal buffer. The program is represented in a `int32_t` array, which can be obtained by `comb_logic.to_binary()`.

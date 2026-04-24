@@ -39,8 +39,7 @@ namespace alir {
       public:
         static const int alir_version = 2;
 
-        void load_from_file(const std::string &filename);
-        void load_from_binary(const std::span<const int32_t> &binary_data);
+        void load_from_bytecode(const std::span<const int32_t> &binary_data);
 
         // Accept CombLogic JSON directly; handles gzip and plain.
         void load_from_json_file(const std::string &path);
