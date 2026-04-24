@@ -10,9 +10,13 @@ import numpy as np
 from numpy import float32, int8
 from numpy.typing import NDArray
 
-from ._binary import alir_interp_run, iceil_log2
+from ._binary import (
+    alir_interp_run,
+    minimal_kif_batch,
+    minimal_kif_scalar,
+)
 
-ALIR_SPEC_VERSION = 2
+ALIR_SPEC_VERSION = 3
 
 
 if TYPE_CHECKING:
@@ -100,35 +104,9 @@ class DAState(NamedTuple):
     kernel: NDArray[float32]
 
 
-def minimal_kif(qi: QInterval, symmetric: bool = False) -> Precision:
-    """Calculate the minimal KIF for a given QInterval.
-
-    Parameters
-    ----------
-    qi : QInterval
-        The QInterval to calculate the KIF for.
-    symmetric : bool
-        Only relevant if qi may be negative. If True, -2**i will be regarded as forbidden.
-        May be useful in special cases only.
-        Default is False.
-
-    Returns
-    -------
-    Precision
-        A named tuple with the KIF values.
-    """
-
-    if qi.min == qi.max == 0:
-        return Precision(keep_negative=False, integers=0, fractional=0)
-    keep_negative = qi.min < 0
-    fractional = -iceil_log2(qi.step)
-    int_min, int_max = round(qi.min / qi.step), round(qi.max / qi.step)
-    if symmetric:
-        bits = iceil_log2(max(abs(int_min), int_max) + 1)
-    else:
-        bits = iceil_log2(max(abs(int_min), int_max + 1))
-    integers = bits - fractional
-    return Precision(keep_negative=keep_negative, integers=integers, fractional=fractional)
+def minimal_kif(qi: QInterval) -> Precision:
+    """Minimal (keep_negative, integers, fractionals) precision for `qi`."""
+    return Precision(*minimal_kif_scalar(qi.min, qi.max, qi.step))
 
 
 T = TypeVar('T', 'FVariable', float, int, np.float32, np.float64)
@@ -457,19 +435,25 @@ class CombLogic(NamedTuple):
         """KIFs of all input elements of the solution."""
         return np.array([minimal_kif(qi) for qi in self.inp_qint]).T
 
-    def save(self, path: str | Path):
-        """Save the solution to a file."""
+    def save(self, path: str | Path, compresslevel: int = 6):
+        """Save to a JSON file; gzip-compresses if path ends with `.gz`."""
         dump = {'model': self, 'meta': 'ALIRModel', 'spec_version': ALIR_SPEC_VERSION}
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'w') as f:
-            json.dump(dump, f, cls=JSONEncoder, separators=(',', ':'))
+        if str(path).endswith('.gz'):
+            import gzip
+
+            with gzip.open(path, 'wt', encoding='utf-8', compresslevel=compresslevel) as f:
+                json.dump(dump, f, cls=JSONEncoder, separators=(',', ':'))
+        else:
+            with open(path, 'w') as f:
+                json.dump(dump, f, cls=JSONEncoder, separators=(',', ':'))
 
     @classmethod
     def from_dict(cls, dump: dict, raw=False):
         """Load ALIR from a serialized dictionary."""
 
         if not raw:
-            assert dump['meta'] == 'ALIRModel', f'Unknown model type {dump["meta"]}'
+            assert dump['meta'] in ('ALIRModel', 'DAISModel'), f'Unknown model type {dump["meta"]}'
             assert dump['spec_version'] == ALIR_SPEC_VERSION, (
                 f'Unsupported spec version {dump["spec_version"]}: expected {ALIR_SPEC_VERSION}'
             )
@@ -500,9 +484,16 @@ class CombLogic(NamedTuple):
 
     @classmethod
     def load(cls, path: str | Path):
-        """Load the solution from a file."""
-        with open(path) as f:
-            data = json.load(f)
+        """Load from a JSON file; accepts gzip (detected by magic bytes)."""
+        with open(path, 'rb') as fb:
+            head = fb.read(2)
+            fb.seek(0)
+            if head == b'\x1f\x8b':  # gzip magic bytes
+                import gzip
+
+                data = json.loads(gzip.decompress(fb.read()).decode('utf-8'))
+            else:
+                data = json.loads(fb.read().decode('utf-8'))
         return cls.from_dict(data)
 
     @property
@@ -529,11 +520,12 @@ class CombLogic(NamedTuple):
     def to_binary(self, version: int = 0) -> NDArray[np.int32]:
         n_in, n_out = self.shape
         header_size_i32 = 6 + n_in + n_out * 3
+        n_ops = len(self.ops)
         n_tables = len(self.lookup_tables) if self.lookup_tables is not None else 0
 
         header = np.concatenate(
             [
-                [ALIR_SPEC_VERSION, version, n_in, n_out, len(self.ops), n_tables],
+                [ALIR_SPEC_VERSION, version, n_in, n_out, n_ops, n_tables],
                 self.inp_shifts,
                 self.out_idxs,
                 self.out_shifts,
@@ -543,21 +535,31 @@ class CombLogic(NamedTuple):
             dtype=np.int32,
         )
         assert len(header) == header_size_i32, f'Header size mismatch: {len(header)} != {header_size_i32}'
-        code = np.empty((len(self.ops), 8), dtype=np.int32)
-        for i, op in enumerate(self.ops):
-            buf = code[i]
-            buf[0] = op.opcode
-            buf[1] = op.id0
-            buf[2] = op.id1
-            buf[5:] = minimal_kif(op.qint)
-            buf_u64 = buf[3:5].view(np.uint64)
-            if op.opcode != 8:
-                buf_u64[0] = op.data & 0xFFFFFFFFFFFFFFFF
-            else:
-                assert self.lookup_tables is not None
-                pad_left = self.lookup_tables[op.data]._get_pads(self.ops[op.id0].qint)[0]
-                buf_u64[0] = ((pad_left << 32) | op.data) & 0xFFFFFFFFFFFFFFFF
-        data = np.concatenate([header, code.flatten()])
+
+        code = np.empty((n_ops, 8), dtype=np.int32)
+        if n_ops > 0:
+            id0s, id1s, opcodes, datas, qints, _lats, _costs = zip(*self.ops)
+            code[:, 0] = np.asarray(opcodes, dtype=np.int32)
+            code[:, 1] = np.asarray(id0s, dtype=np.int32)
+            code[:, 2] = np.asarray(id1s, dtype=np.int32)
+            datas_u64 = np.asarray([d & 0xFFFFFFFFFFFFFFFF for d in datas], dtype=np.uint64)
+            code[:, 3:5] = datas_u64.view(np.int32).reshape(n_ops, 2)
+            qmins, qmaxs, qsteps = zip(*qints)
+            qmins = np.asarray(qmins, dtype=np.float64)
+            qmaxs = np.asarray(qmaxs, dtype=np.float64)
+            qsteps = np.asarray(qsteps, dtype=np.float64)
+            code[:, 5:] = minimal_kif_batch(qmins, qmaxs, qsteps)
+
+            if self.lookup_tables is not None:
+                idx8 = np.flatnonzero(code[:, 0] == 8)
+                for j in idx8:
+                    j_int = int(j)
+                    op = self.ops[j_int]
+                    pad_left = self.lookup_tables[op.data]._get_pads(self.ops[op.id0].qint)[0]
+                    val = ((pad_left << 32) | (op.data & 0xFFFFFFFF)) & 0xFFFFFFFFFFFFFFFF
+                    code[j_int, 3:5].view(np.uint64)[:] = val
+
+        data = np.concatenate([header, code.reshape(-1)])
 
         if self.lookup_tables is None:
             return data
@@ -599,12 +601,10 @@ class CombLogic(NamedTuple):
 
         if isinstance(data, Sequence):
             data = np.concatenate([a.reshape(a.shape[0], -1) for a in data], axis=-1)
-
         if n_threads <= 0:
             n_threads = int(os.environ.get('DA_DEFAULT_THREADS', 0))
-
         bin_logic = self.to_binary()
-        return alir_interp_run(bin_logic, data, n_threads, debug=debug, dump=dump)
+        return alir_interp_run(bin_logic, data, n_threads, dump=dump)
 
 
 class Pipeline(NamedTuple):

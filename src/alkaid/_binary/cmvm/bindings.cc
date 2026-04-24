@@ -38,6 +38,30 @@ nb::typed<nb::tuple, float, float> cost_add_numpy(
     return nb::make_tuple(lat, cost);
 }
 
+nb::tuple minimal_kif_scalar_numpy(double qmin, double qmax, double qstep) {
+    int32_t k, i, f;
+    minimal_kif_one(qmin, qmax, qstep, k, i, f);
+    return nb::make_tuple(k != 0, i, f);
+}
+
+nb::ndarray<nb::numpy, int32_t> minimal_kif_batch_numpy(
+    const nb::ndarray<const double> &qmins,
+    const nb::ndarray<const double> &qmaxs,
+    const nb::ndarray<const double> &qsteps
+) {
+    if (qmins.size() != qmaxs.size() || qmins.size() != qsteps.size()) {
+        throw std::runtime_error(
+            "minimal_kif_batch: qmins/qmaxs/qsteps must have the same length"
+        );
+    }
+    const size_t n = qmins.size();
+    int32_t *out = new int32_t[n * 3];
+    minimal_kif_batch(qmins.data(), qmaxs.data(), qsteps.data(), out, n);
+    nb::capsule owner(out, [](void *p) noexcept { delete[] (int32_t *)p; });
+    const size_t shape[2] = {n, 3};
+    return nb::ndarray<nb::numpy, int32_t>(out, 2, shape, owner);
+}
+
 nb::ndarray<nb::numpy, int8_t> int_arr_to_csd_numpy(const nb::ndarray<int32_t> &in) {
     size_t ndim = in.ndim();
     std::vector<size_t> shape(ndim);
@@ -252,6 +276,18 @@ NB_MODULE(cmvm_bin, m) {
     m.def("get_lsb_loc", &get_lsb_loc, "x"_a);
     m.def("get_lsb_loc_arr", &get_lsb_loc_arr, "x"_a);
     m.def("iceil_log2", &iceil_log2, "x"_a);
+    m.def(
+        "minimal_kif_scalar",
+        &minimal_kif_scalar_numpy,
+        "qmin"_a, "qmax"_a, "qstep"_a
+    );
+    m.def(
+        "minimal_kif_batch",
+        &minimal_kif_batch_numpy,
+        "qmins"_a.noconvert(),
+        "qmaxs"_a.noconvert(),
+        "qsteps"_a.noconvert()
+    );
     m.def("csd_decompose", &csd_decompose_numpy, "inp"_a.noconvert(), "center"_a = true);
     m.def(
         "kernel_decompose", &kernel_decompose_numpy, "kernel"_a.noconvert(), "dc"_a = -2

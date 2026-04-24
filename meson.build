@@ -19,6 +19,8 @@ vcs_tag(
 nanobind_dep = dependency('nanobind')
 omp_dep = dependency('openmp')
 xtensor_dep = dependency('xtensor', default_options: ['use_xsimd=true', 'use_tbb=false', 'use_openmp=true'])
+nlohmann_json_dep = dependency('nlohmann_json')
+zlib_dep = dependency('zlib')
 
 _limited_abi = ''
 
@@ -26,9 +28,12 @@ alir_bin = py.extension_module(
   'alir_bin',
   sources: [
     'src/alkaid/_binary/alir/bindings.cc',
-    'src/alkaid/_binary/alir/ALIRInterpreter.cc',
+    'src/alkaid/_binary/alir/ALIRInterpreter_load.cc',
+    'src/alkaid/_binary/alir/ALIRInterpreter_load_json.cc',
+    'src/alkaid/_binary/alir/ALIRInterpreter_transpile.cc',
+    'src/alkaid/_binary/alir/ALIRInterpreter_dispatch.cc',
   ],
-  dependencies: [nanobind_dep, omp_dep],
+  dependencies: [nanobind_dep, omp_dep, nlohmann_json_dep, zlib_dep],
   install: true,
   subdir: 'alkaid/_binary',
 )
@@ -43,8 +48,6 @@ cmvm_bin = py.extension_module(
     'src/alkaid/_binary/cmvm/indexers.cc',
     'src/alkaid/_binary/cmvm/mat_decompose.cc',
     'src/alkaid/_binary/cmvm/state_opr.cc',
-    'src/alkaid/_binary/alir/bindings.cc',
-    'src/alkaid/_binary/alir/ALIRInterpreter.cc',
   ],
   dependencies: [nanobind_dep, xtensor_dep, omp_dep],
   install: true,

@@ -71,8 +71,10 @@ class OperationTest:
 
     def test_serialization(self, comb: CombLogic, temp_directory: str):
         comb.save(f'{temp_directory}/comb.json')
+        comb.save(f'{temp_directory}/comb.json.gz')
         comb2 = CombLogic.load(f'{temp_directory}/comb.json')
-        assert comb == comb2
+        comb3 = CombLogic.load(f'{temp_directory}/comb.json.gz')
+        assert comb == comb2 and comb == comb3
 
     def test_pipe_serialization(self, comb: CombLogic, temp_directory: str):
         pipe = to_pipeline(comb, 2, verbose=True)
