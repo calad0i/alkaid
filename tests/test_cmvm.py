@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from alkaid._binary import csd_decompose, kernel_decompose, solve
-from alkaid.trace.passes import optimize
+from alkaid.trace.passes import _fast_optimize
 from alkaid.types import Pipeline
 
 
@@ -52,7 +52,7 @@ def test_solve(kernel, method0, method1, hard_dc, decompose_dc, search_all_decom
         search_all_decompose_dc=search_all_decompose_dc,
     )
 
-    combs = tuple(optimize(stage, False) for stage in sol.solutions)
+    combs = tuple(_fast_optimize(stage, False) for stage in sol.solutions)
     pipe = Pipeline(combs)
     _ = pipe.__repr__()
 
