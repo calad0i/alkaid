@@ -148,6 +148,8 @@ def _trace_model(
 
 
 class KerasALIRTracer(ALIRTracerPluginBase):
+    """Built-in top-level tracer for Keras 3 models."""
+
     model: keras.Model
 
     def apply_model(self, verbose: bool, inputs: tuple[FVArray, ...]):

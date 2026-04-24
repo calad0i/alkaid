@@ -20,13 +20,7 @@ def _flatten_arr(args: Any) -> FVArray:
 
 
 class ALIRTracerPluginBase:
-    """
-    Base class for ALIR tracer plugins.
-
-    Methods to be implemented by subclasses:
-    - `apply_model`
-    - `get_input_shapes`
-    """
+    """Base class for top-level `alir_tracer.plugins` model tracers."""
 
     def __init__(
         self,
@@ -45,30 +39,31 @@ class ALIRTracerPluginBase:
         verbose: bool,
         inputs: tuple[FVArray, ...],
     ) -> tuple[dict[str, FVArray] | dict[str, tuple[FVArray, ...]], list[str]]:
-        """Apply the model and return all intermediate traces.
+        """Replay the wrapped model on symbolic inputs.
 
         Parameters
-        ==========
-        model: The model to be traced.
-        verbose: Whether to print verbose output.
-        inputs: Optional inputs to the model.
+        ----------
+        verbose
+            Whether to print trace details.
+        inputs
+            Symbolic inputs to pass to the model.
 
         Returns
-        =======
-        A tuple containing:
-        - dict[str, FVArray]: A dictionary of intermediate names -> FVArray
-        - list[str]: A list of output names.
+        -------
+        tuple
+            A trace dictionary and the keys that should be treated as outputs.
         """
         ...
 
     def get_input_shapes(
         self,
     ) -> Sequence[tuple[int, ...]] | None:
-        """Get the input shapes for the model. Only used if get_input_kifs returns None.
+        """Return input shapes when they can be inferred from the model.
 
         Returns
-        =======
-        A list of input shapes, or None if not applicable. If cannot be determined, return None.
+        -------
+        Sequence[tuple[int, ...]] | None
+            Input shapes, or None when callers must provide symbolic inputs.
         """
         ...
 
@@ -103,19 +98,25 @@ class ALIRTracerPluginBase:
         inputs_kif: tuple[int, int, int] | None = None,
         dump: bool = False,
     ) -> dict[str, FVArray] | dict[str, tuple[FVArray, ...]] | tuple[FVArray, FVArray]:
-        """Trace the model.
+        """Trace the wrapped model into symbolic alkaid inputs and outputs.
 
         Parameters
-        ==========
-        verbose: Whether to print verbose output.
-        inputs: Optional inputs to the model.
-        inputs_kif: Optional input kif values, only used if inputs is None.
-        dump: Whether to dump all intermediate traces.
+        ----------
+        verbose
+            Whether to print verbose output.
+        inputs
+            Optional symbolic inputs. If omitted, `get_input_shapes()` is used.
+        inputs_kif
+            Optional input KIF values used when `inputs` is omitted.
+        dump
+            Whether to return all intermediate traces instead of flattened
+            input/output arrays.
 
         Returns
-        =======
-        If dump is True, returns a dictionary of all intermediate names -> FVArray.
-        If dump is False, returns a list of output FVArray.
+        -------
+        dict | tuple[FVArray, FVArray]
+            A trace dictionary when `dump` is true, otherwise flattened symbolic
+            inputs and outputs.
         """
 
         inputs = self._get_inputs(inputs, inputs_kif)

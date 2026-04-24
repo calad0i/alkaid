@@ -433,7 +433,7 @@ def _add_report_args(parser: argparse.ArgumentParser):
         '-s',
         type=str,
         default='comb_metric',
-        help='Attribute to sort the summary by. Default is cost.',
+        help='Attribute to sort the summary by. Default is comb_metric.',
     )
     parser.add_argument(
         '--full',

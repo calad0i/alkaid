@@ -198,7 +198,9 @@ def convert_main(args):
 
 
 def _add_convert_args(parser: argparse.ArgumentParser):
-    parser.add_argument('model', type=Path, help='Path to the Keras model file (.h5 or .keras)')
+    parser.add_argument(
+        'model', type=Path, help='Path to a Keras model (.h5 or .keras) or serialized ALIR model (.json or .json.gz)'
+    )
     parser.add_argument('outdir', type=Path, help='Output directory')
     parser.add_argument('--n-test-sample', '-n', type=int, default=131072, help='Number of test samples for validation')
     parser.add_argument('--clock-period', '-c', type=float, default=5.0, help='Clock period in ns')
@@ -255,7 +257,7 @@ def _add_convert_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         '--xls',
         action='store_true',
-        help='Whether use XLS for Verilog generation. Only applicable when --flavor is set to verilog.',
+        help='Use XLS for Verilog generation. Requires xls-python and only applies when --flavor is set to verilog.',
     )
     parser.add_argument(
         '--no-shreg',
@@ -270,7 +272,7 @@ def _add_convert_args(parser: argparse.ArgumentParser):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Convert Keras model to alkaid RTL model with random input test vectors')
+    parser = argparse.ArgumentParser(description='Convert Keras or serialized ALIR models to alkaid RTL/HLS projects')
     _add_convert_args(parser)
     args = parser.parse_args()
     convert_main(args)

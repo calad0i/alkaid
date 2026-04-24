@@ -35,14 +35,12 @@ class ExampleModel:
 
 
 class ExampleALIRTracer(ALIRTracerPluginBase):
-    """An example ALIR tracer plugin for the ExampleModel. Two methods must be implemented:
-    - `get_input_shapes`
-    - `apply_model`
+    """Example top-level tracer for `ExampleModel`.
 
-    This plugin must be registered as an entry point under the group `alir_tracer.plugins`.
-    The entry name should be the module name where the model class is defined. In this case,
-    since the target model class `ExampleModel` is defined in `alkaid.converter.example_plugin`, the entry point
-    should be registered under the name `alkaid`. See `pyproject.toml` for an example.
+    The package registers this class under the `alkaid` key in the
+    `alir_tracer.plugins` entry-point group. It implements the two methods
+    required by `ALIRTracerPluginBase`: `get_input_shapes()` and
+    `apply_model()`.
     """
 
     model: ExampleModel

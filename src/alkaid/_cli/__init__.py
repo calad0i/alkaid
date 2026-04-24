@@ -9,8 +9,10 @@ def main():
     parser = argparse.ArgumentParser(description='Welcome to the alkaid command line interface')
     subparsers = parser.add_subparsers(dest='command')
 
-    convert_parser = subparsers.add_parser('convert', help='Convert a Keras model to RTL project')
-    report_parser = subparsers.add_parser('report', help='Generate report from an existing RTL projects')
+    convert_parser = subparsers.add_parser(
+        'convert', help='Convert a Keras, ALIR JSON, or ALIR JSON.GZ model to a codegen project'
+    )
+    report_parser = subparsers.add_parser('report', help='Generate reports from existing RTL/HLS projects')
     _add_convert_args(convert_parser)
     _add_report_args(report_parser)
     parser.add_argument('--version', '-v', action='version', version=f'%(prog)s {_version.__version__}')

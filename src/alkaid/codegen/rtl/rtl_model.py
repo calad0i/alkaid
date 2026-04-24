@@ -104,18 +104,19 @@ class RTLModel:
         clock_uncertainty: float = 0.1,
         io_delay_minmax: tuple[float, float] = (0.2, 0.4),
     ):
-        """Class for generating RTL code and emulator from a CombLogic or Pipeline solution.
+        """Generate an RTL project and optional compiled emulator from `CombLogic`.
 
         Parameters
         ----------
         comb_logic : CombLogic
-            The ALIR combinational logic definition to be converted to RTL. If n_stages or latency_cutoff is specified, it will be automatically pipelined before codegen.
+            ALIR combinational logic to convert to RTL. If `n_stages` or
+            `latency_cutoff` is specified, it is pipelined before codegen.
         path : str | Path
             The path to save the generated RTL project. The directory will be created if it does not exist.
         prj_name : str | None, optional
             Top module name of the generated RTL. If None, canonicalized name of the directory will be used. Default is None.
         flavor : str, optional
-            Either 'verilog' or 'vhdl'. Default is 'verilog'.
+            Either `verilog` or `vhdl`. Default is `verilog`.
         n_stages : int, optional
             Number of pipeline stages of the generated RTL. If negative, it will be determined by latency_cutoff.
             If both n_stages and latency_cutoff are not specified, the generated RTL will be purely combinational. Default is -1.

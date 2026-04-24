@@ -25,21 +25,22 @@ def _index_remap(op: Op, idx_map: dict[int, int]) -> Op:
 
 
 def to_pipeline(comb: CombLogic, n_stages: int | None = None, latency_cutoff: float | None = None, verbose=True) -> Pipeline:
-    """Split the record into multiple stages based on the latency of the operations.
-    Only useful for HDL generation.
-    Exactly one of n_stages and latency_cutoff must be specified.
+    """Split a `CombLogic` program into latency-balanced pipeline stages.
+
+    Exactly one of `n_stages` and `latency_cutoff` must be specified. The
+    resulting `Pipeline` is intended for RTL generation.
 
     Parameters
     ----------
-    sol : CombLogic
+    comb : CombLogic
         The combinational logic to be pipelined into multiple stages.
-    n_stages : int|None
-        The number of stages to split the operations into. If None, it will be determined by the latency_cutoff. Default is None.
-    latency_cutoff : float
-        The latency cutoff for splitting the operations. If None, it will be determined by the n_stages. Default is None.
+    n_stages : int | None
+        Number of stages to create.
+    latency_cutoff : float | None
+        Maximum target latency per stage. The final stage count is derived
+        from the total operation latency.
     verbose : bool
-        Whether to print the actual cutoff used for splitting. Only used if rebalance is True.
-        Default is True.
+        Whether to print the latency cutoffs used for splitting.
 
     Returns
     -------

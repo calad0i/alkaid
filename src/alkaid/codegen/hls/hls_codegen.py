@@ -155,7 +155,7 @@ def ssa_gen(comb: CombLogic, print_latency: bool, typestr_fn: Callable[[bool | i
                         raise ValueError(f'Unsupported unary bit op subop: {op.data}')
             case 10:
                 # Binary bit ops
-                # data: {subopcode[63:56], pad0, v1_neg[33], v0_neg[32], shift[31:0]}
+                # data: {subopcode[63:56], reserved[55:32], shift[31:0]}
                 ref1 = f'v{op.id1}'
                 shift = ((op.data & 0xFFFFFFFF) + 0x80000000) % 0x100000000 - 0x80000000
                 ref1 = ref1 if shift == 0 else f'bit_shift<{shift}>({ref1})'

@@ -12,6 +12,8 @@ from .xls_codegen import build_xls_function, build_xls_io_wrapper
 
 
 class XLSModel:
+    """Experimental XLS wrapper for ALIR JIT execution and Verilog generation."""
+
     def __init__(
         self,
         logic: CombLogic | Pipeline,

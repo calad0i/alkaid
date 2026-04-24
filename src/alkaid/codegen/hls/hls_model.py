@@ -24,6 +24,8 @@ T = TypeVar('T', bound=np.floating)
 
 
 class HLSModel:
+    """Generate an HLS C++ project and optional compiled emulator from `CombLogic`."""
+
     def __init__(
         self,
         solution: CombLogic,

@@ -58,15 +58,7 @@ def _pad_to_pow2(a: 'FVArray') -> 'tuple[FVArray, int, int]':
 
 
 def batcher_odd_even_merge_sort(a: 'NDArray', ascending: bool):
-    """##copy-paste from wikipedia https://en.wikipedia.org/wiki/Batcher_odd%E2%80%93even_mergesort; apparently it works
-
-    note: the input sequence is indexed from 0 to (n-1)
-    for p = 1, 2, 4, 8, ... # as long as p < n
-      for k = p, p/2, p/4, p/8, ... # as long as k >= 1
-        for j = mod(k,p) to (n-1-k) with a step size of 2k
-          for i = 0 to min(k-1, n-j-k-1) with a step size of 1
-            if floor((i+j) / (p*2)) == floor((i+j+k) / (p*2))
-              compare and sort elements (i+j) and (i+j+k)"""
+    """Sort an in-place power-of-two sequence with Batcher odd-even mergesort."""
 
     for _p in range(ceil(log2(a.shape[0]))):
         p = 2**_p

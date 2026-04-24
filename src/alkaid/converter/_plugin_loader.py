@@ -4,7 +4,7 @@ Third-party packages can register framework-specific handlers by declaring an
 entry point under the groups ``alkaid_keras`` or ``alkaid_torch`` that points
 to a zero-argument callable. The callable's job is to import modules whose
 class-creation side effects register handlers in the appropriate registry. A
-plugin is loaded at most once per Python process
+plugin is loaded at most once per Python process.
 """
 
 from functools import cache

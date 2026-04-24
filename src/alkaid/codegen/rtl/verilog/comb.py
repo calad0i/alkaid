@@ -170,7 +170,7 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
                         raise ValueError(f'Unknown bitwise operation {op.data} for operation {i} ({op})')
 
             case 10:  # Bitwise Binary
-                # data: {subopcode[63:56], pad0, v1_neg[33], v0_neg[32], shift[31:0]}
+                # data: {subopcode[63:56], reserved[55:32], shift[31:0]}
                 data = op.data
                 subop, _shift = (data >> 56) & 0xFF, data & 0xFFFFFFFF
                 shift = (_shift + 0x80000000) % 0x100000000 - 0x80000000 + kifs[op.id0][2] - kifs[op.id1][2]

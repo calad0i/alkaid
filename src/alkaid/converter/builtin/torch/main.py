@@ -68,6 +68,8 @@ def _resolve_attr(root: torch.nn.Module, target: str):
 
 
 class TorchALIRTracer(ALIRTracerPluginBase):
+    """Built-in top-level tracer for Torch modules through `torch.fx`."""
+
     def _get_inputs(
         self,
         inputs: tuple[FVArray, ...] | FVArray | None,
