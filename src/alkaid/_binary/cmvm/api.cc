@@ -1,8 +1,10 @@
 #include "api.hh"
 #include "cmvm_core.hh"
 #include "mat_decompose.hh"
+#include "indexers.hh"
 #include "src/alkaid/_binary/cmvm/types.hh"
 #include "state_opr.hh"
+#include "xtensor/core/xmath.hpp"
 #include <cmath>
 #include <algorithm>
 #include <limits>
@@ -138,6 +140,13 @@ PipelineResult _solve(
     return result;
 }
 
+int get_max_decompose_dc(xt::xarray<float> kernel, int hard_dc) {
+    auto [mat0, mat1] = kernel_decompose(xt::xarray<float>(kernel), hard_dc);
+    int n_non_zero = xt::amax(xt::count_nonzero(mat1, 0))();
+    int max_decompose_dc = static_cast<int>(iceil_log2(static_cast<float>(n_non_zero)));
+    return std::max(max_decompose_dc, 0);
+}
+
 PipelineResult solve(
     const xt::xarray<float> &kernel,
     const std::string &method0,
@@ -174,8 +183,7 @@ PipelineResult solve(
     if (_hard_dc < 0)
         _hard_dc = std::numeric_limits<int>::max();
 
-    int max_decompose_dc =
-        std::min(_hard_dc, static_cast<int>(std::ceil(std::log2(static_cast<float>(n_in)))));
+    int max_decompose_dc = get_max_decompose_dc(kernel, _hard_dc);
 
     std::vector<int> try_dcs;
     for (int d = 0; d <= max_decompose_dc; ++d) {
