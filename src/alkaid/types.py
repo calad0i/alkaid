@@ -640,17 +640,6 @@ class Pipeline(NamedTuple):
         lat_min, lat_max = self.latency
         return f'CascatedSolution([{shape_str}], cost={_cost}, latency={lat_min}-{lat_max})'
 
-    @classmethod
-    def from_dict(cls, data: dict, raw=False):
-        if not raw:
-            assert data['meta'] == 'ALIRPipeline', f'Unknown model type {data["meta"]}'
-            assert data['spec_version'] == ALIR_SPEC_VERSION, (
-                f'Unsupported spec version {data["spec_version"]}: expected {ALIR_SPEC_VERSION}'
-            )
-        data = data['model'] if not raw else data
-
-        return cls(solutions=tuple(CombLogic.from_dict(sol, raw=True) for sol in data[0]))
-
     @property
     def reg_bits(self):
         """The number of bits used for the register in the solution."""
