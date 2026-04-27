@@ -322,3 +322,23 @@ class TestBitNot(OperationTestSynth):
             return x + 3.75
 
         return func
+
+
+class TestIdendity(OperationTestSynth):
+    @pytest.fixture()
+    def op_func(self):
+        return lambda x: x
+
+    @pytest.fixture()
+    def inp(self) -> FVArray:
+        b = np.zeros(8, dtype=np.int64)
+        i = np.array([64, 63, 62, 61, 60, 59, 58, 57], dtype=np.int64)
+        k = np.array([1, 0, 1, 0, 1, 0, 1, 0], dtype=np.int64)
+        inp = FVArray.from_kif(k, i, b - i)
+        return inp
+
+    @pytest.fixture(autouse=True)
+    def test_data(self, inp: FVArray, n_samples: int):
+        shape = inp.shape
+        data = (np.random.rand(n_samples, *shape) - 0.5) * 2**65
+        return data

@@ -54,7 +54,7 @@ bool openmp_enabled() {{
     return _openmp;
 }}
 
-void inference(int32_t *c_inp, int32_t *c_out, size_t n_samples, size_t n_threads) {{
+void inference(int64_t *c_inp, int64_t *c_out, size_t n_samples, size_t n_threads) {{
     batch_inference<{module_name}_config>(c_inp, c_out, n_samples, n_threads);
 }}
 }}
@@ -463,17 +463,17 @@ class RTLModel:
         kifs_in, kifs_out = get_io_kifs(self._comb)
         k_in, i_in, f_in = map(np.max, kifs_in)
         k_out, i_out, f_out = map(np.max, kifs_out)
-        assert k_in + i_in + f_in <= 32, "Padded inp bw doesn't fit in int32. Emulation not supported"
-        assert k_out + i_out + f_out <= 32, "Padded out bw doesn't fit in int32. Emulation not supported"
+        assert k_in + i_in + f_in <= 64, "Padded inp bw doesn't fit in int64. Emulation not supported"
+        assert k_out + i_out + f_out <= 64, "Padded out bw doesn't fit in int64. Emulation not supported"
 
-        inp_data = np.empty(n_sample * inp_size, dtype=np.int32)
-        out_data = np.empty(n_sample * out_size, dtype=np.int32)
+        inp_data = np.empty(n_sample * inp_size, dtype=np.int64)
+        out_data = np.empty(n_sample * out_size, dtype=np.int64)
 
-        # Convert to int32 matching the LSB position
+        # Convert to int64 matching the LSB position
         inp_data[:] = np.floor(data.ravel() * 2.0**f_in)
 
-        inp_buf = inp_data.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
-        out_buf = out_data.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        inp_buf = inp_data.ctypes.data_as(ctypes.POINTER(ctypes.c_int64))
+        out_buf = out_data.ctypes.data_as(ctypes.POINTER(ctypes.c_int64))
 
         if n_threads == 0:
             n_threads = int(os.environ.get('DA_DEFAULT_THREADS', 0))
@@ -481,7 +481,7 @@ class RTLModel:
         with at_path(self._path / 'src/memfiles'):
             self._lib.inference(inp_buf, out_buf, n_sample, n_threads)
 
-        # Unscale the output int32 to recover fp values
+        # Unscale the output int64 to recover fp values
         k, i, f = np.max(k_out), np.max(i_out), np.max(f_out)
         a, b, c = 2.0 ** (k + i + f), k * 2.0 ** (i + f), 2.0**-f
         return ((out_data.reshape(n_sample, out_size) + b) % a - b) * c.astype(np.float32)
