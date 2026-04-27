@@ -27,8 +27,8 @@ def get_io_kifs(sol: CombLogic | Pipeline):
 def binder_gen(csol: Pipeline | CombLogic, module_name: str, II: int = 1):
     k_in, i_in, f_in = zip(*map(minimal_kif, csol.inp_qint))
     k_out, i_out, f_out = zip(*map(minimal_kif, csol.out_qint))
-    max_inp_bw = max(k_in) + max(i_in) + max(f_in)
-    max_out_bw = max(k_out) + max(i_out) + max(f_out)
+    k_in_max, i_in_max, f_in_max = max(k_in), max(i_in), max(f_in)
+    k_out_max, i_out_max, f_out_max = max(k_out), max(i_out), max(f_out)
     if isinstance(csol, CombLogic):
         II = latency = 0
     else:
@@ -42,8 +42,12 @@ def binder_gen(csol: Pipeline | CombLogic, module_name: str, II: int = 1):
 struct {module_name}_config {{
     static const size_t N_inp = {n_in};
     static const size_t N_out = {n_out};
-    static const size_t max_inp_bw = {max_inp_bw};
-    static const size_t max_out_bw = {max_out_bw};
+    static const int k_in = {int(k_in_max)};
+    static const int i_in = {i_in_max};
+    static const int f_in = {f_in_max};
+    static const int k_out = {int(k_out_max)};
+    static const int i_out = {i_out_max};
+    static const int f_out = {f_out_max};
     static const size_t II = {II};
     static const size_t latency = {latency};
     typedef V{module_name} dut_t;
@@ -54,8 +58,12 @@ bool openmp_enabled() {{
     return _openmp;
 }}
 
-void inference(int64_t *c_inp, int64_t *c_out, size_t n_samples, size_t n_threads) {{
-    batch_inference<{module_name}_config>(c_inp, c_out, n_samples, n_threads);
+void inference_f32(float *c_inp, float *c_out, size_t n_samples, size_t n_threads) {{
+    batch_inference<{module_name}_config, float>(c_inp, c_out, n_samples, n_threads);
+}}
+
+void inference_f64(double *c_inp, double *c_out, size_t n_samples, size_t n_threads) {{
+    batch_inference<{module_name}_config, double>(c_inp, c_out, n_samples, n_threads);
 }}
 }}
 """
@@ -433,19 +441,21 @@ class RTLModel:
         self.write(metadata=metadata, xls_opt=xls_opt, no_shreg=no_shreg)
         self._compile(verbose=verbose, openmp=openmp, nproc=nproc, o3=o3, clean=clean)
 
-    def predict(self, data: NDArray | Sequence[NDArray], n_threads: int = 0) -> NDArray[np.float32]:
+    def predict(self, data: NDArray[np.floating] | Sequence[NDArray[np.floating]], n_threads: int = 0) -> NDArray[np.floating]:
         """Run the model on the input data.
 
         Parameters
         ----------
         data : NDArray[np.floating]|Sequence[NDArray[np.floating]]
             Input data to the model. The shape is ignored, and the number of samples is
-            determined by the size of the data.
+            determined by the size of the data. Must be float32 or float64; the output
+            matches the input dtype.
 
         Returns
         -------
-        NDArray[np.float64]
-            Output of the model in shape (n_samples, output_size).
+        NDArray[np.floating]
+            Output of the model in shape (n_samples, output_size), with the same dtype
+            as `data`.
         n_threads : int, optional
             Number of threads to use for inference. If 0, will use all available threads, or the value of
             the DA_DEFAULT_THREADS environment variable if set. If < 0, OpenMP will be disabled. Default is 0.
@@ -457,6 +467,11 @@ class RTLModel:
         assert self._lib is not None, 'Library not loaded, call .compile() first.'
         inp_size, out_size = self._comb.shape
 
+        dtype = data.dtype
+        if dtype not in (np.float32, np.float64):
+            raise TypeError(f'Unsupported input data type: {dtype}. Expected float32 or float64.')
+        c_dtype = ctypes.c_float if dtype == np.float32 else ctypes.c_double
+
         assert data.size % inp_size == 0, f'Input size {data.size} is not divisible by {inp_size}'
         n_sample = data.size // inp_size
 
@@ -466,25 +481,20 @@ class RTLModel:
         assert k_in + i_in + f_in <= 64, "Padded inp bw doesn't fit in int64. Emulation not supported"
         assert k_out + i_out + f_out <= 64, "Padded out bw doesn't fit in int64. Emulation not supported"
 
-        inp_data = np.empty(n_sample * inp_size, dtype=np.int64)
-        out_data = np.empty(n_sample * out_size, dtype=np.int64)
+        inp_data = np.ascontiguousarray(data.reshape(-1))
+        out_data = np.empty(n_sample * out_size, dtype=dtype)
 
-        # Convert to int64 matching the LSB position
-        inp_data[:] = np.floor(data.ravel() * 2.0**f_in)
-
-        inp_buf = inp_data.ctypes.data_as(ctypes.POINTER(ctypes.c_int64))
-        out_buf = out_data.ctypes.data_as(ctypes.POINTER(ctypes.c_int64))
+        inp_buf = inp_data.ctypes.data_as(ctypes.POINTER(c_dtype))
+        out_buf = out_data.ctypes.data_as(ctypes.POINTER(c_dtype))
 
         if n_threads == 0:
             n_threads = int(os.environ.get('DA_DEFAULT_THREADS', 0))
 
+        fn = self._lib.inference_f32 if dtype == np.float32 else self._lib.inference_f64
         with at_path(self._path / 'src/memfiles'):
-            self._lib.inference(inp_buf, out_buf, n_sample, n_threads)
+            fn(inp_buf, out_buf, n_sample, n_threads)
 
-        # Unscale the output int64 to recover fp values
-        k, i, f = np.max(k_out), np.max(i_out), np.max(f_out)
-        a, b, c = 2.0 ** (k + i + f), k * 2.0 ** (i + f), 2.0**-f
-        return ((out_data.reshape(n_sample, out_size) + b) % a - b) * c.astype(np.float32)
+        return out_data.reshape(n_sample, out_size)
 
     def __repr__(self):
         inp_size, out_size = self._comb.shape
