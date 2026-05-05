@@ -84,7 +84,7 @@ jobs:
           pattern: cibw-wheels-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v8g
+      - uses: actions/download-artifact@v8
         with:
           name: sdist
 
