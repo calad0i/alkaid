@@ -4,7 +4,7 @@ from typing import TypedDict
 
 import numpy as np
 
-from .._binary import kernel_decompose, solve
+from .._binary import cmvm_solve, kernel_decompose
 from ..types import CombLogic, Op, QInterval
 
 if typing.TYPE_CHECKING:
@@ -25,4 +25,4 @@ class solver_options_t(TypedDict, total=False):
     """
 
 
-__all__ = ['solve', 'QInterval', 'Op', 'CombLogic', 'kernel_decompose']
+__all__ = ['cmvm_solve', 'QInterval', 'Op', 'CombLogic', 'kernel_decompose']

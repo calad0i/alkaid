@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from alkaid._binary import csd_decompose, kernel_decompose, solve
+from alkaid._binary import cmvm_solve, csd_decompose, kernel_decompose
 from alkaid.trace.passes import _fast_optimize
 from alkaid.types import Pipeline
 
@@ -42,8 +42,8 @@ def test_kernel_decompose(kernel, dc: int):
 @pytest.mark.parametrize('method1', ['mc', 'wmc'])
 @pytest.mark.parametrize('decompose_dc', [0, -1, -2])
 @pytest.mark.parametrize('search_all_decompose_dc', [False, True])
-def test_solve(kernel, method0, method1, hard_dc, decompose_dc, search_all_decompose_dc):
-    sol: Pipeline = solve(
+def test_cmvm_solve(kernel, method0, method1, hard_dc, decompose_dc, search_all_decompose_dc):
+    sol: Pipeline = cmvm_solve(
         kernel,
         hard_dc=hard_dc,
         method0=method0,

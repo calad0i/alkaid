@@ -11,7 +11,7 @@ from uuid import UUID
 import numpy as np
 from numpy.typing import NDArray
 
-from .._binary.cmvm_bin import get_lsb_loc, get_lsb_loc_arr, solve
+from .._binary.cmvm_bin import get_lsb_loc, get_lsb_loc_arr, scm_solve
 from ..types import QInterval, minimal_kif
 from .affine_interval import AffineInterval
 
@@ -438,20 +438,13 @@ class FVariable:
         if self.high == self.low:
             return self.from_const(float(self.low) * float(other), hwconf=self.hwconf)
 
-        if np.all(other == 0):
+        if other == 0:
             return FVariable(0, 0, 1, hwconf=self.hwconf, opr='const')
+        exp = log2(abs(other))
+        if exp.is_integer():
+            return self._pow2_mul(float(other))
 
-        if log2(abs(other)) % 1 == 0:
-            return self._pow2_mul(other)
-
-        ker = np.array([[other]], dtype=np.float32)
-        sol = solve(
-            ker,
-            decompose_dc=-1,
-            qintervals=[self._affine.qint],
-            latencies=[self.latency],
-        )
-        return sol([self])[0]
+        return scm_solve(other, 2)([self], quantize=False)[0]
 
     def _var_mul(self, other: 'FVariable') -> 'FVariable':
         if other is not self:

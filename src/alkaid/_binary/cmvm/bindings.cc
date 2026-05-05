@@ -2,6 +2,7 @@
 #include "mat_decompose.hh"
 #include "api.hh"
 #include "indexers.hh"
+#include "scm.hh"
 #include "types.hh"
 #include "state_opr.hh"
 
@@ -20,6 +21,13 @@ struct PyPipeline {};
 namespace nanobind::detail {
     template <> struct type_caster<PyPipeline> {
         NB_TYPE_CASTER(PyPipeline, const_name("alkaid.types.Pipeline"))
+    };
+} // namespace nanobind::detail
+
+struct PyCombLogic {};
+namespace nanobind::detail {
+    template <> struct type_caster<PyCombLogic> {
+        NB_TYPE_CASTER(PyCombLogic, const_name("alkaid.types.CombLogic"))
     };
 } // namespace nanobind::detail
 
@@ -184,7 +192,7 @@ static std::vector<float> extract_latencies(nb::object obj) {
 using vec_of_qints = nb::typed<nb::sequence, nb::typed<nb::tuple, float, float, float>>;
 
 // Python-facing solve function
-static nb::typed<nb::object, PyPipeline> solve_numpy(
+static nb::typed<nb::object, PyPipeline> cmvm_numpy(
     const nb::ndarray<float> &kernel_arr,
     const std::string &method0,
     const std::string &method1,
@@ -206,7 +214,7 @@ static nb::typed<nb::object, PyPipeline> solve_numpy(
     auto qintervals = extract_qintervals(qintervals_obj);
     auto latencies = extract_latencies(latencies_obj);
 
-    auto result = solve(
+    auto result = cmvm(
         xt::xarray<float>(kernel),
         method0,
         method1,
@@ -242,6 +250,13 @@ nb::ndarray<nb::numpy, int8_t> get_lsb_loc_arr(nb::ndarray<float> arr) {
     return nb::ndarray<nb::numpy, int8_t>(ret_ptr, arr.ndim(), (size_t *)(arr.shape_ptr()), owner);
 }
 
+static nb::typed<nb::object, PyCombLogic>
+scm_numpy(double constant, int k, const nb::typed<nb::tuple, float, float, float> &qint_obj) {
+    QInterval qint{nb::cast<float>(qint_obj[0]), nb::cast<float>(qint_obj[1]), nb::cast<float>(qint_obj[2])};
+    auto sol = scm(constant, k, qint);
+    return make_py_comblogic(sol);
+}
+
 NB_MODULE(cmvm_bin, m) {
     m.def("int_arr_to_csd", &int_arr_to_csd_numpy, "inp"_a.noconvert());
     m.def("get_lsb_loc", &get_lsb_loc, "x"_a);
@@ -258,8 +273,8 @@ NB_MODULE(cmvm_bin, m) {
     m.def("csd_decompose", &csd_decompose_numpy, "inp"_a.noconvert(), "center"_a = true);
     m.def("kernel_decompose", &kernel_decompose_numpy, "kernel"_a.noconvert(), "dc"_a = -2);
     m.def(
-        "solve",
-        &solve_numpy,
+        "cmvm_solve",
+        &cmvm_numpy,
         "kernel"_a.noconvert(),
         "method0"_a = "wmc",
         "method1"_a = "auto",
@@ -283,4 +298,16 @@ NB_MODULE(cmvm_bin, m) {
         )
     );
     m.def("overlap_counts", &overlap_counts_, "q0"_a, "q1"_a, "shift1"_a);
+    m.def(
+        "scm_solve",
+        &scm_numpy,
+        "constant"_a,
+        "k"_a = 1,
+        "qint"_a = nb::make_tuple(-128.0f, 127.0f, 1.0f),
+        nb::sig(
+            "def scm_solve(constant: float, k: int = 1, qint: tuple[float, float, float]=(-128., 127., 0.)) "
+            "-> "
+            "alkaid.types.CombLogic"
+        )
+    );
 }

@@ -11,7 +11,7 @@ float minimal_latency(
     bool partial = false
 );
 
-PipelineResult _solve(
+PipelineResult _cmvm(
     const xt::xarray<float> &kernel,
     std::string method0 = "wmc",
     std::string method1 = "auto",
@@ -22,7 +22,7 @@ PipelineResult _solve(
     bool partial = false
 );
 
-PipelineResult solve(
+PipelineResult cmvm(
     const xt::xarray<float> &kernel,
     const std::string &method0 = "wmc",
     const std::string &method1 = "auto",

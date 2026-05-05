@@ -47,6 +47,7 @@ cmvm_bin = py.extension_module(
     'src/alkaid/_binary/cmvm/cmvm_core.cc',
     'src/alkaid/_binary/cmvm/indexers.cc',
     'src/alkaid/_binary/cmvm/mat_decompose.cc',
+    'src/alkaid/_binary/cmvm/scm.cc',
     'src/alkaid/_binary/cmvm/state_opr.cc',
   ],
   dependencies: [nanobind_dep, xtensor_dep, omp_dep],

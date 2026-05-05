@@ -2,6 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .cmvm_bin import (
+    cmvm_solve,
     csd_decompose,
     get_lsb_loc,
     iceil_log2,
@@ -10,7 +11,7 @@ from .cmvm_bin import (
     minimal_kif_batch,
     minimal_kif_scalar,
     overlap_counts,
-    solve,
+    scm_solve,
 )
 
 
@@ -41,7 +42,8 @@ __all__ = [
     'kernel_decompose',
     'minimal_kif_batch',
     'minimal_kif_scalar',
-    'solve',
+    'scm_solve',
+    'cmvm_solve',
     'iceil_log2',
     'overlap_counts',
 ]

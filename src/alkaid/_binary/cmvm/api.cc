@@ -26,7 +26,7 @@ float minimal_latency(
     return max_lat;
 }
 
-PipelineResult _solve(
+PipelineResult _cmvm(
     const xt::xarray<float> &kernel,
     std::string method0,
     std::string method1,
@@ -147,7 +147,7 @@ int get_max_decompose_dc(xt::xarray<float> kernel, int hard_dc) {
     return std::max(max_decompose_dc, 0);
 }
 
-PipelineResult solve(
+PipelineResult cmvm(
     const xt::xarray<float> &kernel,
     const std::string &method0,
     const std::string &method1,
@@ -176,7 +176,7 @@ PipelineResult solve(
     }
 
     if (!search_all_decompose_dc) {
-        return _solve(kernel, method0, method1, hard_dc, decompose_dc, qintervals, latencies, partial);
+        return _cmvm(kernel, method0, method1, hard_dc, decompose_dc, qintervals, latencies, partial);
     }
 
     int _hard_dc = hard_dc;
@@ -199,7 +199,7 @@ PipelineResult solve(
     for (size_t i = 0; i < n_tries; ++i) {
         try {
             auto _csol =
-                _solve(kernel, method0, method1, _hard_dc, try_dcs[i], qintervals, latencies, partial);
+                _cmvm(kernel, method0, method1, _hard_dc, try_dcs[i], qintervals, latencies, partial);
             float _cost = 0.0;
             for (auto &sol : _csol.solutions) {
                 for (auto &op : sol.ops) {
