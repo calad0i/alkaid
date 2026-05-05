@@ -27,7 +27,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
 
       - name: Install verilator
-        uses: veryl-lang/setup-verilator@v1
+        uses: veryl-lang/setup-verilator@7464f6aacf42efab9a92b9138e9ce16ff1135f69
 
       - name: Install ghdl
         uses: ghdl/setup-ghdl@v1
