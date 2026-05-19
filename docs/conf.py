@@ -49,7 +49,7 @@ source_suffix = {
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'autodoc/modules.rst']
 
-html_logo = '_static/icon.svg'
+# html_logo = '_static/icon.svg'
 html_theme_options = {
     'logo_only': True,
 }
@@ -67,4 +67,4 @@ html_context = {
 
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
-html_favicon = '_static/icon.svg'
+# html_favicon = '_static/icon.svg'
