@@ -190,7 +190,7 @@ def convert_main(args):
         n_threads=args.n_threads,
         metadata=metadata,
         inputs_kif=args.inputs_kif,
-        xls_opt=args.xls,
+        xls_opt=args.xls_opt,
         no_shreg=args.no_shreg,
         opt=not args.no_opt,
         n_stages=args.n_stages,
@@ -255,7 +255,8 @@ def _add_convert_args(parser: argparse.ArgumentParser):
         help='Number of pipeline stages for pipelining. If set to positive, it will override latency cutoff and pipeline into exactly this many stages.',
     )
     parser.add_argument(
-        '--xls',
+        '--xls-opt',
+        '-xopt',
         action='store_true',
         help='Use XLS for Verilog generation. Requires xls-python and only applies when --flavor is set to verilog.',
     )
