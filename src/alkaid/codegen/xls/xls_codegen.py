@@ -5,7 +5,7 @@ from xls import FunctionBuilder, Package, Value
 from xls.c_api import optimize_ir, parse_ir_package
 from xls.ir_builder import BuilderBase, BValue, Function
 
-from ...types import CombLogic, minimal_kif
+from ...types import CombLogic
 
 
 def _extend(bb: BuilderBase, val: BValue, old_bw: int, new_bw: int, is_signed: bool) -> BValue:
@@ -333,16 +333,16 @@ def _build_core_ops(bb, pkg, sol, model_inp, inp_starts, inp_widths, kifs, width
 def _sol_io_params(sol: CombLogic):
     """Compute I/O parameters from a CombLogic solution."""
     ops = sol.ops
-    kifs = list(map(minimal_kif, (op.qint for op in ops)))
+    kifs = [op.qint.kif for op in ops]
     widths: list[int] = list(map(sum, kifs))
 
-    inp_kifs = [minimal_kif(qint) for qint in sol.inp_qint]
+    inp_kifs = [qint.kif for qint in sol.inp_qint]
     inp_widths = list(map(sum, inp_kifs))
     _inp_widths = np.cumsum([0] + inp_widths)
     inp_starts = _inp_widths[:-1].tolist()
     total_inp_bits = int(_inp_widths[-1])
 
-    out_kifs = [minimal_kif(qint) for qint in sol.out_qint]
+    out_kifs = [qint.kif for qint in sol.out_qint]
     out_widths = [sum(k) for k in out_kifs]
     total_out_bits = sum(out_widths)
 

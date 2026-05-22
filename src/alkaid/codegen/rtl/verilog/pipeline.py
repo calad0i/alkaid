@@ -1,4 +1,4 @@
-from ....types import Pipeline, minimal_kif
+from ....types import Pipeline
 from .comb import comb_logic_gen
 
 
@@ -12,8 +12,8 @@ def pipeline_logic_gen(
 ):
     comb_logic_gen_fn = comb_logic_gen_fn or comb_logic_gen
     N = len(csol.solutions)
-    inp_bits = [sum(map(sum, map(minimal_kif, sol.inp_qint))) for sol in csol.solutions]
-    out_bits = inp_bits[1:] + [sum(map(sum, map(minimal_kif, csol.out_qint)))]
+    inp_bits = [sol.inp_kifs.sum() for sol in csol.solutions]
+    out_bits = inp_bits[1:] + [csol.out_kifs.sum()]
 
     reg_attr = '(* shreg_extract = "no" *) ' if no_shreg else ''
     registers = [f'{reg_attr}reg [{width - 1}:0] stage{i}_inp;' for i, width in enumerate(inp_bits)]

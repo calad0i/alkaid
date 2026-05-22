@@ -7,7 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 from xls.raw import jit_fn_predict
 
-from ...types import CombLogic, Pipeline, minimal_kif
+from ...types import CombLogic, Pipeline
 from .xls_codegen import build_xls_function, build_xls_io_wrapper
 
 
@@ -91,7 +91,7 @@ class XLSModel:
         inp_size, out_size = sol.shape
         assert data.size % inp_size == 0
 
-        inp_kifs = np.array([minimal_kif(qi) for qi in sol.inp_qint])
+        inp_kifs = np.array([qi.kif for qi in sol.inp_qint])
         k_in, i_in, f_in = np.max(inp_kifs, axis=0)
         max_inp_bw = int(k_in + i_in + f_in)
 
@@ -100,15 +100,15 @@ class XLSModel:
         # Run all samples through the JIT in C++
         out_int = jit_fn_predict(self._jit._raw, inp_int, max_inp_bw, inp_size, out_size)
 
-        out_kifs = np.array([minimal_kif(qi) for qi in sol.out_qint])
+        out_kifs = np.array([qi.kif for qi in sol.out_qint])
         k, i, f = np.max(out_kifs, axis=0)
         a, b, c = 2.0 ** (k + i + f), k * 2.0 ** (i + f), 2.0**-f
         return ((out_int.reshape(-1, out_size) + b) % a - b) * c
 
     def __repr__(self):
         inp_size, out_size = self._solution.shape
-        inp_kifs = [minimal_kif(qi) for qi in self._solution.inp_qint]
-        out_kifs = [minimal_kif(qi) for qi in self._solution.out_qint]
+        inp_kifs = [qi.kif for qi in self._solution.inp_qint]
+        out_kifs = [qi.kif for qi in self._solution.out_qint]
         in_bits = sum(sum(k) for k in inp_kifs)
         out_bits = sum(sum(k) for k in out_kifs)
         jitted = 'JIT compiled' if self._jit is not None else 'not compiled'

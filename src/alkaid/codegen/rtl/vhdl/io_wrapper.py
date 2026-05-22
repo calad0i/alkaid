@@ -1,6 +1,6 @@
 from itertools import accumulate
 
-from ....types import CombLogic, Pipeline, QInterval, minimal_kif
+from ....types import CombLogic, Pipeline, QInterval
 
 
 def _loc(i: int, j: int):
@@ -9,7 +9,7 @@ def _loc(i: int, j: int):
 
 def hetero_io_map(qints: list[QInterval], merge: bool = False):
     N = len(qints)
-    ks, _is, fs = zip(*map(minimal_kif, qints))
+    ks, _is, fs = zip(*(qint.kif for qint in qints))
     Is = [_i + _k for _i, _k in zip(_is, ks)]
     max_I, max_f = max(_is) + max(ks), max(fs)
     max_bw = max_I + max_f

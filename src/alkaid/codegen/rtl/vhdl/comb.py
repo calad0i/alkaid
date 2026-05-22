@@ -2,17 +2,16 @@ from math import ceil, log2
 
 import numpy as np
 
-from ....types import CombLogic, minimal_kif
+from ....types import CombLogic
 from ..verilog.comb import get_table_name_memfile
 
 
 def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency: bool = False):
     ops = sol.ops
-    kifs = list(map(minimal_kif, (op.qint for op in ops)))
+    kifs = [op.qint.kif for op in ops]
     widths = list(map(sum, kifs))
-    inp_kifs = [minimal_kif(qint) for qint in sol.inp_qint]
-    inp_widths = list(map(sum, inp_kifs))
-    _inp_widths = np.cumsum([0] + inp_widths)
+    inp_widths = sol.inp_kifs.sum(axis=0)
+    _inp_widths = np.concat([[0], np.cumsum(inp_widths)])
     inp_idxs = np.stack([_inp_widths[1:] - 1, _inp_widths[:-1]], axis=1)
 
     signals = []
@@ -163,7 +162,7 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
 def output_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]]):
     assigns = []
     signals = []
-    widths = list(map(sum, map(minimal_kif, sol.out_qint)))
+    widths = sol.out_kifs.sum(axis=0).tolist()
     _widths = np.cumsum([0] + widths)
     out_idxs = np.stack([_widths[1:] - 1, _widths[:-1]], axis=1)
     for i, idx in enumerate(sol.out_idxs):
@@ -179,8 +178,8 @@ def output_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]]):
 
 
 def comb_logic_gen(sol: CombLogic, fn_name: str, print_latency: bool = False, timescale: str | None = None):
-    inp_bits = sum(map(sum, map(minimal_kif, sol.inp_qint)))
-    out_bits = sum(map(sum, map(minimal_kif, sol.out_qint)))
+    inp_bits = sol.inp_kifs.sum()
+    out_bits = sol.out_kifs.sum()
 
     neg_repo: dict[int, tuple[int, str]] = {}
     ssa_signals, ssa_assigns = ssa_gen(sol, neg_repo=neg_repo, print_latency=print_latency)

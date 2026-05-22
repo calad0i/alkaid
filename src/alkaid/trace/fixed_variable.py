@@ -12,7 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .._binary.cmvm_bin import get_lsb_loc, get_lsb_loc_arr, scm_solve
-from ..types import QInterval, minimal_kif
+from ..types import QInterval
 from .affine_interval import AffineInterval
 
 rd = random.Random()
@@ -35,7 +35,7 @@ class TableSpec:
 
     @property
     def out_kif(self) -> tuple[bool, int, int]:
-        return minimal_kif(self.out_qint)
+        return self.out_qint.kif
 
 
 def to_spec(table: NDArray[np.floating]) -> tuple[TableSpec, NDArray[np.int32], NDArray[np.bool_] | None]:
@@ -143,7 +143,7 @@ class LookupTable:
         return cls(table, spec=spec)
 
     def _get_pads(self, qint: QInterval) -> tuple[int, int]:
-        k, i, f = minimal_kif(qint)
+        k, i, f = qint.kif
         if k:
             pad_left = round((qint.min + 2**i) / qint.step)
         else:
@@ -185,7 +185,7 @@ def _binary_bit_op(a: float, b: float, op: int, qint0: QInterval, qint1: QInterv
     _fn = {0: lambda x, y: x & y, 1: lambda x, y: x | y, 2: lambda x, y: x ^ y}[op]
     assert isinstance(a, float) and isinstance(b, float)
     assert qint0 is not None and qint1 is not None and qint is not None
-    k, i, f = minimal_kif(qint)
+    k, i, f = qint.kif
     step = min(qint0.step, qint1.step)
     _a, _b = round(a / step), round(b / step)
     return interpret_as(_fn(_a, _b), k, i, f)
@@ -194,13 +194,13 @@ def _binary_bit_op(a: float, b: float, op: int, qint0: QInterval, qint1: QInterv
 def _unary_bit_op(a: float, op: int, qint_from: QInterval, qint_to: QInterval | None = None) -> float:
     assert isinstance(a, float)
     assert qint_from is not None
-    k, i, f = minimal_kif(qint_from) if qint_from.min != 0 or qint_from.max != 0 else (False, 1, 0)
+    k, i, f = qint_from.kif if qint_from.min != 0 or qint_from.max != 0 else (False, 1, 0)
     _a = round(a / qint_from.step)
     match op:
         case 0:
             if not qint_to:
                 return interpret_as(~_a, k, i, f)
-            kk, ii, ff = minimal_kif(qint_to)
+            kk, ii, ff = qint_to.kif
             return interpret_as((~_a) % 2 ** (k + i + f), kk, ii, ff)
         case 1:
             return float(_a != 0)

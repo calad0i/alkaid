@@ -5,7 +5,7 @@ from uuid import UUID
 import numpy as np
 
 from ...trace.fixed_variable import interpret_as
-from ...types import CombLogic, Op, QInterval, minimal_kif
+from ...types import CombLogic, Op, QInterval
 
 
 def gen_table_name_defline(sol: CombLogic, op: Op, typestr_fn: Callable[[bool | int, int, int], str]) -> tuple[str, str]:
@@ -66,7 +66,7 @@ def get_typestr_fn(flavor: str):
 
 def ssa_gen(comb: CombLogic, print_latency: bool, typestr_fn: Callable[[bool | int, int, int], str]):
     ops = comb.ops
-    all_kifs = list(map(minimal_kif, (op.qint for op in ops)))
+    all_kifs = [op.qint.kif for op in ops]
     all_types = list(map(lambda x: typestr_fn(*x), all_kifs))
 
     lines = []
@@ -107,7 +107,7 @@ def ssa_gen(comb: CombLogic, print_latency: bool, typestr_fn: Callable[[bool | i
                 sign = '-' if v < 0 else '+'
                 step = 2.0**-f
                 v = abs(v) * step
-                const_type_str = typestr_fn(*minimal_kif(QInterval(v, v, step)))
+                const_type_str = typestr_fn(*QInterval(v, v, step).kif)
                 val = f'{ref0} {sign} {const_type_str}({v})'
 
             case 5:
@@ -190,7 +190,7 @@ def output_gen(sol: CombLogic, typestr_fn: Callable[[bool | int, int, int], str]
         if idx < 0:
             lines.append(f'model_out[{i}] = 0;')
             continue
-        _type = typestr_fn(*minimal_kif(sol.out_qint[i]))
+        _type = typestr_fn(*sol.out_qint[i].kif)
         shift = sol.out_shifts[i]
         neg_str = '-' if sol.out_negs[i] else ''
         if shift == 0:
@@ -202,9 +202,9 @@ def output_gen(sol: CombLogic, typestr_fn: Callable[[bool | int, int, int], str]
 
 def get_io_types(sol: CombLogic, flavor: str):
     typestr_fn = get_typestr_fn(flavor)
-    in_kif = map(max, zip(*map(minimal_kif, sol.inp_qint)))
+    in_kif = np.max(sol.inp_kifs, axis=1)
     inp_type = typestr_fn(*in_kif)
-    out_kif = map(max, zip(*map(minimal_kif, sol.out_qint)))
+    out_kif = np.max(sol.out_kifs, axis=1)
     out_type = typestr_fn(*out_kif)
     return inp_type, out_type
 

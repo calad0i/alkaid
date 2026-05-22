@@ -16,7 +16,6 @@ from numpy.typing import NDArray
 from alkaid.codegen.hls.hls_codegen import get_io_types, hls_logic_and_bridge_gen
 from alkaid.types import CombLogic
 
-from ...types import minimal_kif
 from .. import hls
 from ..rtl.rtl_model import canon_name
 
@@ -316,9 +315,7 @@ class HLSModel:
         inp_size, out_size = self._solution.shape
         inp_size, out_size = self._solution.shape
         cost = round(self._solution.cost)
-        inp_kifs = tuple(zip(*map(minimal_kif, self._solution.inp_qint)))
-        out_kifs = tuple(zip(*map(minimal_kif, self._solution.out_qint)))
-        in_bits, out_bits = np.sum(inp_kifs), np.sum(out_kifs)
+        in_bits, out_bits = np.sum(self._solution.inp_kifs), np.sum(self._solution.out_kifs)
 
         spec = f"""Top Function: {self._prj_name}\n====================
 {inp_size} ({in_bits} bits) -> {out_size} ({out_bits} bits)

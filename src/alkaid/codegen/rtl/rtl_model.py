@@ -14,21 +14,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ...trace.pipeline import to_pipeline
-from ...types import CombLogic, Pipeline, minimal_kif
+from ...types import CombLogic, Pipeline
 from .. import rtl
 
 
-def get_io_kifs(sol: CombLogic | Pipeline):
-    inp_kifs = tuple(zip(*map(minimal_kif, sol.inp_qint)))
-    out_kifs = tuple(zip(*map(minimal_kif, sol.out_qint)))
-    return np.array(inp_kifs, np.int8), np.array(out_kifs, np.int8)
-
-
 def binder_gen(csol: Pipeline | CombLogic, module_name: str, II: int = 1):
-    k_in, i_in, f_in = zip(*map(minimal_kif, csol.inp_qint))
-    k_out, i_out, f_out = zip(*map(minimal_kif, csol.out_qint))
-    k_in_max, i_in_max, f_in_max = max(k_in), max(i_in), max(f_in)
-    k_out_max, i_out_max, f_out_max = max(k_out), max(i_out), max(f_out)
+    k_in_max, i_in_max, f_in_max = csol.inp_kifs.max(axis=1)
+    k_out_max, i_out_max, f_out_max = csol.out_kifs.max(axis=1)
     if isinstance(csol, CombLogic):
         II = latency = 0
     else:
@@ -475,9 +467,8 @@ class RTLModel:
         assert data.size % inp_size == 0, f'Input size {data.size} is not divisible by {inp_size}'
         n_sample = data.size // inp_size
 
-        kifs_in, kifs_out = get_io_kifs(self._comb)
-        k_in, i_in, f_in = map(np.max, kifs_in)
-        k_out, i_out, f_out = map(np.max, kifs_out)
+        k_in, i_in, f_in = self._comb.inp_kifs.max(axis=1)
+        k_out, i_out, f_out = self._comb.out_kifs.max(axis=1)
         assert k_in + i_in + f_in <= 64, "Padded inp bw doesn't fit in int64. Emulation not supported"
         assert k_out + i_out + f_out <= 64, "Padded out bw doesn't fit in int64. Emulation not supported"
 
@@ -499,8 +490,7 @@ class RTLModel:
     def __repr__(self):
         inp_size, out_size = self._comb.shape
         cost = round(self._comb.cost)
-        kifs_in, kifs_out = get_io_kifs(self._comb)
-        in_bits, out_bits = np.sum(kifs_in), np.sum(kifs_out)
+        in_bits, out_bits = self._comb.inp_kifs.sum(), self._comb.out_kifs.sum()
         if self._pipe is not None:
             n_stage = len(self._pipe[0])
             lat_cutoff = self._latency_cutoff

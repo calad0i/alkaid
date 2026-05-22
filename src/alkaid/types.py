@@ -32,6 +32,10 @@ class QInterval(NamedTuple):
     max: float
     step: float
 
+    @property
+    def kif(self):
+        return Precision(*minimal_kif_scalar(*self))
+
 
 class Precision(NamedTuple):
     """Fixed-point precision in KIF form: sign flag, integer bits, fractional bits."""
@@ -103,11 +107,6 @@ class DAState(NamedTuple):
     ops: list[Op]
     freq_stat: dict[Pair, int]
     kernel: NDArray[float32]
-
-
-def minimal_kif(qi: QInterval) -> Precision:
-    """Minimal (keep_negative, integers, fractionals) precision for `qi`."""
-    return Precision(*minimal_kif_scalar(qi.min, qi.max, qi.step))
 
 
 T = TypeVar('T', 'FVariable', float, int, np.float32, np.float64)
@@ -290,11 +289,11 @@ class CombLogic(NamedTuple):
                 ret = v0 + v1 if op.opcode == 0 else v0 - v1
             case 2:  # relu(+/-x)
                 v = buf[op.id0]
-                _, _i, _f = minimal_kif(op.qint)
+                _, _i, _f = op.qint.kif
                 ret = _relu(v, _i, _f, round_mode='TRN')
             case 3:  # quantize(+/-x)
                 v = buf[op.id0] if op.opcode == 3 else -buf[op.id0]
-                _k, _i, _f = minimal_kif(op.qint)
+                _k, _i, _f = op.qint.kif
                 ret = _quantize(v, _k, _i, _f, round_mode='TRN')
             case 4:  # const addition
                 shift = (((op.data >> 32) & 0xFFFFFFFF) + (1 << 31)) % (1 << 32) - (1 << 31)
@@ -315,9 +314,9 @@ class CombLogic(NamedTuple):
                     if qint_k.min < 0:
                         ret = v0 if k < 0 else v1 * 2.0**shift
                     else:
-                        _k, _i, _f = minimal_kif(qint_k)
+                        _k, _i, _f = qint_k.kif
                         ret = v0 if k >= 2.0 ** (_i - 1) else v1 * 2.0**shift
-                    ret = _quantize(ret, *minimal_kif(op.qint), round_mode='TRN')
+                    ret = _quantize(ret, *op.qint.kif, round_mode='TRN')
             case 7:  # multiplication
                 v0, v1 = buf[op.id0], buf[op.id1]
                 ret = v0 * v1
@@ -377,7 +376,7 @@ class CombLogic(NamedTuple):
         return [self.ops[i].latency if i >= 0 else 0.0 for i in self.out_idxs]
 
     @property
-    def out_qint(self):
+    def out_qint(self) -> list[QInterval]:
         """Quantization intervals of the output elements."""
         buf = []
         for i, idx in enumerate(self.out_idxs):
@@ -392,7 +391,7 @@ class CombLogic(NamedTuple):
     @property
     def out_kifs(self):
         """KIFs of all output elements of the solution."""
-        return np.array([minimal_kif(qi) for qi in self.out_qint]).T
+        return np.array([qi.kif for qi in self.out_qint]).T
 
     @property
     def inp_latency(self):
@@ -412,7 +411,7 @@ class CombLogic(NamedTuple):
     @property
     def inp_kifs(self):
         """KIFs of all input elements of the solution."""
-        return np.array([minimal_kif(qi) for qi in self.inp_qint]).T
+        return np.array([qi.kif for qi in self.inp_qint]).T
 
     def save(self, path: str | Path, compresslevel: int = 6):
         """Save to a JSON file; gzip-compresses if path ends with `.gz`."""
@@ -606,12 +605,20 @@ class Pipeline(NamedTuple):
         return self.solutions[0].inp_qint
 
     @property
+    def inp_kifs(self):
+        return self.solutions[0].inp_kifs
+
+    @property
     def inp_latency(self):
         return self.solutions[0].inp_latency
 
     @property
     def out_qint(self):
         return self.solutions[-1].out_qint
+
+    @property
+    def out_kifs(self):
+        return self.solutions[-1].out_kifs
 
     @property
     def out_latency(self):
@@ -643,9 +650,9 @@ class Pipeline(NamedTuple):
     @property
     def reg_bits(self):
         """The number of bits used for the register in the solution."""
-        bits = sum(map(sum, (minimal_kif(qint) for qint in self.inp_qint)))
+        bits = sum(map(sum, (qint.kif for qint in self.inp_qint)))
         for _sol in self.solutions:
-            kifs = [minimal_kif(qint) for qint in _sol.out_qint]
+            kifs = [qint.kif for qint in _sol.out_qint]
             _bits = sum(map(sum, kifs))
             bits += _bits
         return bits

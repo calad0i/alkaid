@@ -5,7 +5,7 @@ import numpy as np
 from ..._binary import iceil_log2, overlap_counts
 from ...trace import HWConfig
 from ...trace.fixed_variable import LookupTable
-from ...types import CombLogic, Op, QInterval, minimal_kif
+from ...types import CombLogic, Op, QInterval
 from .cse import is_used_in
 
 
@@ -111,7 +111,7 @@ def _count_luts(bit_nd: np.ndarray, LUT_X: int = 6) -> float:
 
 def cost_lat_lut(qint_in: QInterval, table: LookupTable, LUT_X: int, LUT_Y: int, skip_cost: bool = False):
 
-    bw_in = sum(minimal_kif(qint_in))
+    bw_in = sum(qint_in.kif)
     lat = max(bw_in - LUT_X, 1) * 0.5
 
     if skip_cost:
@@ -143,7 +143,7 @@ def cost_lat_mux(qint0: QInterval, qint1: QInterval, shift1: int, LUT_X: int, LU
 
 def cost_relu(qint: QInterval, LUT_X: int = 6, LUT_Y: int = 5):
     # LUT6_2 fractures, but somehow 1/3 of the bits can't be shared statistically...
-    return sum(minimal_kif(qint)) * 0.666, 0
+    return sum(qint.kif) * 0.666, 0
 
 
 def cost_lat_bin_bitops(qint0: QInterval, qint1: QInterval, shift1: int, LUT_X: int, LUT_Y: int):
@@ -186,13 +186,13 @@ def cost_lat_op(
         case 4:  # cadd: absorbed if consumer is not add/sub/mux
             eff_consumers = _cadd_consumer_width(idx, ops, used_in)
             if any(cop in (0, 1, 6) for cop in eff_consumers):
-                bw_in = sum(minimal_kif(ops[op.id0].qint))
+                bw_in = sum(ops[op.id0].qint.kif)
                 return max(bw_in - 1, 0) * 0.30, 0
             return 0, 0
         case 5:  # const
             return 0, 0
         case 6:  # msb_mux
-            out_bw = sum(minimal_kif(op.qint))
+            out_bw = sum(op.qint.kif)
             sf = _is_const_descendent(idx, ops, _cache)
             return out_bw * (0.5 - 0.36 * sf), 1.0
         case 7:  # mul
