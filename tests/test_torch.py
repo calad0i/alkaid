@@ -399,6 +399,30 @@ class TestBinaryOp:
         _run(op, [(8,), (8,)])
 
 
+class TestBitwiseOp:
+    @pytest.fixture(
+        params=[
+            lambda x, y: x & y,
+            lambda x, y: x | y,
+            lambda x, y: x ^ y,
+            lambda x, y: torch.bitwise_and(x, y),
+            lambda x, y: torch.bitwise_or(x, y),
+            lambda x, y: torch.bitwise_xor(x, y),
+        ],
+        ids=['and', 'or', 'xor', 'bitwise_and', 'bitwise_or', 'bitwise_xor'],
+    )
+    def op(self, request):
+        return request.param
+
+    def test(self, op):
+        _run(
+            op,
+            [(8,), (8,)],
+            kif=(1, 3, 0),
+            hook_data=lambda datas: [d.astype(np.int32) for d in datas],
+        )
+
+
 class TestReduction:
     @pytest.fixture(
         params=[
