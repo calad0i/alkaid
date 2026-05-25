@@ -1,4 +1,4 @@
-# Alkaid: Distributed Arithmetic for Machine Learning
+# Alkaid: A Library for Kernel Accelerator Implemented on Device
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/calad0i/alkaid/unit-test.yml?label=test)](https://github.com/calad0i/alkaid/actions/workflows/unit-test.yml)
 [![Documentation](https://img.shields.io/github/actions/workflow/status/calad0i/alkaid/sphinx-build.yml?label=doc)](https://calad0i.github.io/alkaid/)

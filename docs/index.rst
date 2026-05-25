@@ -1,6 +1,6 @@
-===========================================
-Distributed Arithmetic for Machine Learning
-===========================================
+======================================================
+A Library for Kernel Accelerator Implemented on Device
+======================================================
 
 .. .. image:: https://img.shields.io/badge/License-LGPLv3-blue.svg
 ..    :target: https://www.gnu.org/licenses/lgpl-3.0.en.html
@@ -21,7 +21,7 @@ Distributed Arithmetic for Machine Learning
    :alt: alkaid-overview
    :width: 600
 
-alkaid is a lightweight compiler for generating low-latency, static-dataflow kernels for FPGAs. It traces quantized arithmetic graph into ALIR, applies distributed-arithmetic optimization through CMVM where useful, and emits RTL or HLS projects.
+Alkaid is a lightweight compiler for generating low-latency, static-dataflow kernels for FPGAs. It traces quantized arithmetic graph into ALIR, applies distributed-arithmetic optimization through CMVM where useful, and emits RTL or HLS projects.
 
 As a static-dataflow compiler, alkaid is specialized for kernels that are equivalent to combinational logic or an initiation-interval-one pipeline. The generated kernels are intended to be building blocks that users can compose into larger designs when resource sharing or time multiplexing is required.
 
