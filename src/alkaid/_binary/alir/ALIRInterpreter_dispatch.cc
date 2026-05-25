@@ -132,7 +132,8 @@ namespace alir {
                     buffer + (size_t)_op.a0 * B,
                     table.data(),
                     (int64_t)table.size(),
-                    off
+                    off,
+                    allow_oob_lookup
                 );
                 break;
             }

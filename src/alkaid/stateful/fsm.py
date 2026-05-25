@@ -1,5 +1,6 @@
 import gzip
 import json
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
@@ -17,12 +18,48 @@ class Dir(Enum):
     INTERNAL = 0
 
 
-class ModuloSchedule(NamedTuple):
-    toggle: tuple[int, ...]
-    period: int
+class ModuloSchedule:
+    def __init__(self, toggle: tuple[int, ...], period: int):
+        assert period > 0, 'Period must be positive'
+        assert max(toggle) - min(toggle) < period, 'Toggle values must be within one period'
+        _bias = min(toggle)
+        self.toggle = tuple((t - _bias) % period for t in toggle)
+        self.period = period
+        self.bias = _bias
 
-    def check(self, i: int) -> bool:
-        return np.searchsorted(self.toggle, i % self.period, side='right') % 2 == 1
+    @cached_property
+    def valid_mask(self) -> tuple[bool, ...]:
+        valid = np.searchsorted(self.toggle, np.arange(self.period), side='right') % 2 == 1
+        return valid.tolist()
+
+    @cached_property
+    def cum_valid_mask(self) -> tuple[int, ...]:
+        cum_valid = np.cumsum(self.valid_mask)
+        return cum_valid.tolist()
+
+    def to_list(self):
+        return [tuple(t + self.bias for t in self.toggle), self.period]
+
+    def check(self, t: int) -> bool:
+        return t >= self.bias and self.valid_mask[(t - self.bias) % self.period]
+
+    def t_to_dense_idx(self, t: int) -> int:
+        "t-th valid step to dense idx"
+        t = t - self.bias
+        return self.cum_valid_mask[t % self.period] + (t // self.period) * self.cum_valid_mask[-1] - 1
+
+    def n_valid_samples_between(self, t0: int, t1: int) -> int:
+        "Number of valid steps between t0 (inclusive) and t1 (exclusive)"
+        if t1 <= t0:
+            return 0
+        i0, i1 = self.t_to_dense_idx(t0), self.t_to_dense_idx(t1)
+        return max(i1 + 1, 0) - max(i0 + 1, 0)
+
+    def dense_idx_to_t(self, idx: int) -> int:
+        "idx-th valid step to t"
+        period_count = idx // self.cum_valid_mask[-1]
+        idx_in_period = self.cum_valid_mask.index((idx % self.cum_valid_mask[-1]) + 1)
+        return period_count * self.period + idx_in_period + self.bias
 
 
 class NamedPort(NamedTuple):
@@ -39,7 +76,7 @@ class NamedPort(NamedTuple):
 
     @property
     def qint(self) -> tuple[QInterval, ...]:
-        return tuple(kif.qint for kif in self.precisions)
+        return tuple(prec.qint for prec in self.precisions)
 
     @classmethod
     def from_list(cls, lst: list) -> 'NamedPort':
@@ -128,7 +165,7 @@ def _check_io(fsm: 'FSM'):
             assert np.all(write_count <= 1), f'Port {p.name} has elements written more than once'
             if p.dir == Dir.INTERNAL:
                 read_count = read_counts[p.name]
-                assert np.all((read_count > 0) >= (write_count > 0)), (
+                assert np.all((read_count > 0) <= (write_count > 0)), (
                     f'Non-inp port {p.name} has elements read without being written'
                 )
                 if np.any(read_count == 0):
@@ -157,6 +194,7 @@ class FSM:
         self.logic = logic
         self.ports = ports
         self.addr_maps = addr_maps
+        self._has_emu = False
 
         _check_dir_and_bound(self)
         _check_io(self)
@@ -271,63 +309,178 @@ class FSM:
                 data = json.loads(fb.read().decode('utf-8'))
         return cls.from_dict(data)
 
-    def trace(self, data: dict[str, np.ndarray], steps: int) -> dict[str, np.ndarray]:
-        _data = {}
-        for p in self.inp_ports:
-            assert p.name in data, f'Missing input port {p.name} in data'
-            arr = data[p.name]
-            assert arr.shape[1] == p.size
-            if arr.shape[0] >= steps:
-                _data[p.name] = arr[:steps]
-            else:
-                diff = steps - arr.shape[0]
-                _min, _max, _ = np.array(p.qint).T
-                a, b = _max - _min, _min
-                pad = np.random.rand(diff, p.size) * a + b
-                _data[p.name] = np.concatenate([arr, pad], axis=0)
+    def _init_emulator(self):
+        if self._has_emu:
+            return
+        self._emu = FSMEmulator(self)
+        self._has_emu = True
 
-        states = {p.name: np.zeros((steps, p.size), dtype=np.float64) for p in self.ports}
+    def step(self):
+        self._init_emulator()
+        self._emu.step()
 
-        _logic_io = {
+    def reset(self):
+        self._init_emulator()
+        self._emu.reset()
+
+    def run(
+        self,
+        data: dict[str, np.ndarray] | Sequence[np.ndarray] | Sequence[dict[str, np.ndarray]] | np.ndarray,
+        steps: int | None = None,
+        scheduled: bool = True,
+        output_only: bool = True,
+    ) -> dict[str, np.ndarray]:
+        self._init_emulator()
+        return self._emu.run(data, steps, scheduled, output_only)
+
+    @property
+    def states(self) -> dict[str, np.ndarray]:
+        assert self._has_emu, 'Emulator not initialized yet'
+        return self._emu._port_buffers
+
+
+class FSMEmulator:
+    def __init__(self, fsm: FSM):
+        self.fsm = fsm
+        self._init_buffer(False)
+        self._t = 0
+
+    def _create_port_buffers(self, exclude_inputs: bool) -> dict[str, np.ndarray]:
+        return {p.name: np.zeros(p.size, dtype=np.float64) for p in self.fsm.ports if not exclude_inputs or p.dir != Dir.IN}
+
+    def _init_buffer(self, exclude_inputs: bool):
+        self._port_buffers = self._create_port_buffers(exclude_inputs)
+        self._logic_io = {
             logic.name: (
                 np.empty(logic.logic.shape[0], dtype=np.float64),
                 np.empty(logic.logic.shape[1], dtype=np.float64),
             )
-            for logic in self.logic
+            for logic in self.fsm.logic
         }
 
-        for port in self.ports:
-            if port.rst_to is not None:
-                states[port.name][0] = port.rst_to
+    def step(self):
+        for _map in self.fsm.port_to_logic_map:
+            s = slice(*_map.src_interval)
+            d = slice(*_map.dst_interval)
+            self._logic_io[_map.dst][0][d] = self._port_buffers[_map.src][s]
 
-        for t in range(steps):
-            for port in self.inp_ports:
-                states[port.name][t] = _data[port.name][t]
+        for name, (inp_arr, out_arr) in self._logic_io.items():
+            out_arr[:] = self.fsm.get_logic(name).predict(inp_arr)
 
-            for _map in self.port_to_logic_map:
-                s = slice(*_map.src_interval)
-                d = slice(*_map.dst_interval)
-                if self.get_port(_map.src).dir == Dir.IN:
-                    _t = t
+        new_port_buffers = self._create_port_buffers(True)
+        for _map in self.fsm.logic_to_port_map:
+            s = slice(*_map.src_interval)
+            d = slice(*_map.dst_interval)
+            new_port_buffers[_map.dst] = self._logic_io[_map.src][1][s]
+
+        for _map in self.fsm.port_to_port_map:
+            s = slice(*_map.src_interval)
+            d = slice(*_map.dst_interval)
+            new_port_buffers[_map.dst] = self._port_buffers[_map.src][s]
+
+        for k, v in new_port_buffers.items():
+            self._port_buffers[k][:] = v
+
+        del new_port_buffers
+        self._t += 1
+
+    def _has_enough_data(self, data: dict[str, np.ndarray], t0: int, t1: int, scheduled: bool):
+        for port in self.fsm.inp_ports:
+            if scheduled:
+                assert port.schedule is not None, f'Port {port.name} does not have a schedule'
+                n_required = port.schedule.t_to_dense_idx(t1) - port.schedule.t_to_dense_idx(t0)
+            else:
+                n_required = t1 - t0
+            assert len(data[port.name]) >= n_required, f'Not enough data for port {port.name} from t={t0} to t={t1}'
+            if len(data[port.name]) != n_required:
+                warn(
+                    f'Port {port.name} has more data than required from t={t0} to t={t1} ({len(data[port.name])} > {n_required})'
+                )
+
+    def reset(self):
+        for port in self.fsm.ports:
+            if port.rst_to is None or not port.need_rst:
+                continue
+            self._port_buffers[port.name][:] = port.rst_to
+        self._t = 0
+
+    def run(
+        self,
+        data: Mapping[str, np.ndarray] | Sequence[np.ndarray] | Sequence[Mapping[str, np.ndarray]] | np.ndarray,
+        steps: int | None = None,
+        scheduled: bool = True,
+        output_only: bool = True,
+    ) -> dict[str, np.ndarray]:
+
+        t0 = self._t
+        datamap: dict[str, np.ndarray]
+        if isinstance(data, np.ndarray):
+            assert len(self.fsm.inp_ports) == 1, 'Data array provided for multiple input ports'
+            datamap = {self.fsm.inp_ports[0].name: data}
+        elif isinstance(data, Sequence) and not isinstance(data, Mapping):
+            assert len(data) > 0, 'Data sequence cannot be empty'
+            _data = data[0]
+            if isinstance(_data, Mapping):
+                datamap = {k: np.concatenate([d[k] for d in data]) for k in _data.keys()}
+            else:
+                assert isinstance(_data, np.ndarray)
+                assert len(data) == len(self.fsm.inp_ports)
+                datamap = {port.name: data[i] for i, port in enumerate(self.fsm.inp_ports)}  # type: ignore
+        else:
+            assert isinstance(data, Mapping)
+            datamap = {k: np.asarray(v) for k, v in data.items()}
+
+        for port in self.fsm.inp_ports:
+            assert port.name in datamap, f'Missing input port {port.name} in data'
+
+        if scheduled:
+            for port in self.fsm.inp_ports + self.fsm.out_ports:
+                assert port.schedule is not None, f'Port {port.name} does not have a schedule'
+
+        if not steps:
+            if scheduled:
+                steps = min(port.schedule.dense_idx_to_t(len(datamap[port.name]) - 1) for port in self.fsm.inp_ports) + 1  # type: ignore
+            else:
+                steps = min(len(datamap[port.name]) for port in self.fsm.inp_ports)
+
+        results = dict[str, np.ndarray]()
+        for port in self.fsm.out_ports:
+            if scheduled:
+                n_outputs = port.schedule.n_valid_samples_between(t0, t0 + steps)  # type: ignore
+            else:
+                n_outputs = steps
+            results[port.name] = np.empty((n_outputs, port.size), dtype=np.float64)
+        if not output_only:
+            for port in self.fsm.internal_ports:
+                results[port.name] = np.empty((steps, port.size), dtype=np.float64)
+
+        for _ in range(steps):
+            for port in self.fsm.inp_ports:
+                if scheduled:
+                    if not port.schedule.check(self._t):  # type: ignore
+                        continue
+                    idx = port.schedule.n_valid_samples_between(t0, self._t + 1) - 1  # type: ignore
                 else:
-                    _t = max(0, t - 1)
-                _logic_io[_map.dst][0][d] = states[_map.src][_t, s]
+                    idx = self._t - t0
+                self._port_buffers[port.name][:] = datamap[port.name][idx]
 
-            for name, (inp_arr, out_arr) in _logic_io.items():
-                out_arr[:] = self.get_logic(name)(inp_arr)
+            self.step()
 
-            for _map in self.logic_to_port_map:
-                s = slice(*_map.src_interval)
-                d = slice(*_map.dst_interval)
-                states[_map.dst][t, d] = _logic_io[_map.src][1][s]
-
-            for _map in self.port_to_port_map:
-                s = slice(*_map.src_interval)
-                d = slice(*_map.dst_interval)
-                if self.get_port(_map.src).dir == Dir.IN:
-                    _t = t
+            for port in self.fsm.out_ports:
+                if scheduled:
+                    if not port.schedule.check(self._t):  # type: ignore
+                        continue
+                    idx = port.schedule.n_valid_samples_between(t0, self._t) - 1  # type: ignore
                 else:
-                    _t = max(0, t - 1)
-                states[_map.dst][t, d] = states[_map.src][_t, s]
+                    idx = self._t - t0
+                results[port.name][idx] = self._port_buffers[port.name]
+            if not output_only:
+                for port in self.fsm.internal_ports:
+                    results[port.name][self._t] = self._port_buffers[port.name]
+        return results
 
-        return states
+    def predict(
+        self,
+        data: Mapping[str, np.ndarray] | Sequence[np.ndarray] | Sequence[Mapping[str, np.ndarray]] | np.ndarray,
+    ) -> dict[str, np.ndarray]:
+        return self.run(data, steps=None, scheduled=True, output_only=True)

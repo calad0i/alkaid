@@ -200,11 +200,23 @@ namespace alir {
         }
 
         template <int B>
-        inline void
-        op_lookup(int64_t *out, const int64_t *in0, const int32_t *table, int64_t table_size, int64_t off) {
+        inline void op_lookup(
+            int64_t *out,
+            const int64_t *in0,
+            const int32_t *table,
+            int64_t table_size,
+            int64_t off,
+            bool allow_oob_lookup
+        ) {
             for (int s = 0; s < B; ++s) {
                 int64_t index = in0[s] - off;
                 if (index < 0 || index >= table_size) {
+                    if (allow_oob_lookup) {
+                        static thread_local uint32_t lcg = 0x114514u;
+                        lcg = lcg * 1664525u + 1013904223u;
+                        out[s] = static_cast<int64_t>(static_cast<int32_t>(lcg));
+                        continue;
+                    }
                     throw std::runtime_error(
                         "Logic lookup index out of bounds: " + std::to_string(index) +
                         " vs table_size=" + std::to_string(table_size)

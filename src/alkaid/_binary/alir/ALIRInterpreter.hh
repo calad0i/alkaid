@@ -63,6 +63,8 @@ namespace alir {
         size_t get_n_out() const { return n_out; }
         size_t get_n_ops() const { return n_ops; }
         size_t get_n_slots() const { return n_slots; }
+
+        bool allow_oob_lookup = false;
     };
 
 } // namespace alir

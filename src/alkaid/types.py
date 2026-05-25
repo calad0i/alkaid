@@ -45,6 +45,13 @@ class Precision(NamedTuple):
     integers: int
     fractional: int
 
+    @property
+    def qint(self) -> QInterval:
+        step = 2.0**-self.fractional
+        _min = -(2.0**self.integers) if self.keep_negative else 0.0
+        _max = 2.0**self.integers - step
+        return QInterval(_min, _max, step)
+
 
 class Op(NamedTuple):
     """One ALIR operation that writes a single data-buffer element.
@@ -149,6 +156,10 @@ class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if hasattr(o, 'to_dict'):
             return o.to_dict()
+        if hasattr(o, 'to_list'):
+            return o.to_list()
+        if hasattr(o, 'value'):
+            return o.value
         super().default(o)
 
 
