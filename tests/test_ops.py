@@ -96,6 +96,16 @@ class OperationTest:
         comb_pred = comb.predict(test_data[:1000])
         np.testing.assert_equal(comb_pred, fsm_pred)
 
+    @pytest.mark.parametrize('n_stages', [3])
+    def test_fsm_serialization(self, comb: CombLogic, temp_directory: str, n_stages: int):
+        pipe = to_pipeline(comb, n_stages=n_stages)
+        fsm = pipeline_to_fsm(pipe)
+        fsm.save(f'{temp_directory}/fsm.json.gz')
+        fsm.save(f'{temp_directory}/fsm.json')
+        fsm2 = type(fsm).load(f'{temp_directory}/fsm.json.gz')
+        fsm3 = type(fsm).load(f'{temp_directory}/fsm.json')
+        assert fsm == fsm2 == fsm3
+
 
 class OperationTestSynth(OperationTest):
     @pytest.mark.slow

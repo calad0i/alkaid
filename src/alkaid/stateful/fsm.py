@@ -1,6 +1,7 @@
 import gzip
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
@@ -9,7 +10,7 @@ from warnings import warn
 
 import numpy as np
 
-from ..types import ALIR_SPEC_VERSION, CombLogic, JSONEncoder, Precision, QInterval
+from ..types import ALIR_SPEC_VERSION, CombLogic, JSONEncoder, Precision, QInterval, _quantize
 
 
 class Dir(Enum):
@@ -18,14 +19,18 @@ class Dir(Enum):
     INTERNAL = 0
 
 
+@dataclass
 class ModuloSchedule:
-    def __init__(self, toggle: tuple[int, ...], period: int):
-        assert period > 0, 'Period must be positive'
-        assert max(toggle) - min(toggle) < period, 'Toggle values must be within one period'
-        _bias = min(toggle)
-        self.toggle = tuple((t - _bias) % period for t in toggle)
-        self.period = period
-        self.bias = _bias
+    toggle: tuple[int, ...]
+    period: int
+    bias: int = field(init=False)
+
+    def __post_init__(self):
+        assert self.period > 0, 'Period must be positive'
+        toggle = self.toggle
+        assert max(toggle) - min(toggle) < self.period, f'Toggle values ({toggle}) must be within one period ({self.period})'
+        self.bias = min(toggle)
+        self.toggle = tuple((t - self.bias) for t in toggle)
 
     @cached_property
     def valid_mask(self) -> tuple[bool, ...]:
@@ -36,6 +41,11 @@ class ModuloSchedule:
     def cum_valid_mask(self) -> tuple[int, ...]:
         cum_valid = np.cumsum(self.valid_mask)
         return cum_valid.tolist()
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ModuloSchedule):
+            return False
+        return self.toggle == other.toggle and self.period == other.period and self.bias == other.bias
 
     def to_list(self):
         return [tuple(t + self.bias for t in self.toggle), self.period]
@@ -62,13 +72,30 @@ class ModuloSchedule:
         return period_count * self.period + idx_in_period + self.bias
 
 
-class NamedPort(NamedTuple):
+@dataclass
+class NamedPort:
     name: str
     dir: Dir
     precisions: tuple[Precision, ...]
     rst_to: tuple[float, ...] | None = None
     schedule: ModuloSchedule | None = None
     need_rst: bool = True
+
+    def __post_init__(self):
+        if self.rst_to is not None:
+            assert len(self.rst_to) == len(self.precisions), 'Reset value length must match precision length'
+            self.rst_to = tuple(_quantize(x, *kif) for x, kif in zip(self.rst_to, self.precisions))
+        self.precisions = tuple(Precision(*kif) for kif in self.precisions)
+        if self.need_rst and self.rst_to is None:
+            self.rst_to = tuple(0.0 for _ in self.precisions)
+        self.dir = Dir(self.dir)
+        if isinstance(self.schedule, list):
+            self.schedule = ModuloSchedule(*self.schedule)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, NamedPort):
+            return False
+        return self.__dict__ == other.__dict__
 
     @property
     def size(self) -> int:
@@ -78,16 +105,8 @@ class NamedPort(NamedTuple):
     def qint(self) -> tuple[QInterval, ...]:
         return tuple(prec.qint for prec in self.precisions)
 
-    @classmethod
-    def from_list(cls, lst: list) -> 'NamedPort':
-        assert len(lst) in (5, 6), 'Invalid port list'
-        name, dir_str, kifs_list, rst_to_list, sched, *rest = lst
-        dir = Dir(dir_str)
-        kifs = tuple(Precision(*kif) for kif in kifs_list)
-        rst_to = tuple(rst_to_list) if rst_to_list is not None else None
-        sched = ModuloSchedule(*sched) if sched is not None else None
-        need_rst = bool(rest[0]) if rest else True
-        return cls(name, dir, kifs, rst_to, sched, need_rst)
+    def to_dict(self) -> dict:
+        return self.__dict__
 
 
 class NamedLogic(NamedTuple):
@@ -272,7 +291,7 @@ class FSM:
             d = d['fsm']
 
         _logic = tuple(NamedLogic.from_list(l) for l in d['logic'])
-        _ports = tuple(NamedPort.from_list(p) for p in d['ports'])
+        _ports = tuple(NamedPort(**p) for p in d['ports'])
         _addr_maps = tuple(AddrMap.from_list(m) for m in d['addr_maps'])
         return cls(_logic, _ports, _addr_maps)
 
@@ -344,6 +363,11 @@ class FSM:
     def states(self) -> dict[str, np.ndarray]:
         assert self._has_emu, 'Emulator not initialized yet'
         return self._emu._port_buffers
+
+    def __eq__(self, other: object):
+        if not isinstance(other, FSM):
+            return False
+        return self.logic == other.logic and self.ports == other.ports and self.addr_maps == other.addr_maps
 
 
 class FSMEmulator:
