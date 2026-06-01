@@ -147,6 +147,15 @@ class TestReLU:
         _run(op, [(8,)])
 
 
+class TestOpReLU:
+    @pytest.mark.parametrize(
+        'config',
+        [(0.0, None, 0.0), (0.25, None, 0.0), (0.0, 6.0, 0.0), (0.0, None, 6.0)],
+    )
+    def test(self, config):
+        _run(lambda x: keras.activations.relu(x, *config), [(8,)])
+
+
 def custom(x):
     return ops.sin(x) + ops.cos(x)
 

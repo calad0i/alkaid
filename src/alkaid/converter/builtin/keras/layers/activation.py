@@ -4,6 +4,7 @@ import keras
 import numpy as np
 from keras import ops
 from keras.layers import Activation, LeakyReLU, PReLU, ReLU
+from keras.src.activations.activations import ReLU as OpReLU
 
 from alkaid.trace import FVArray
 from alkaid.trace.ops import relu
@@ -108,11 +109,11 @@ def keras_unary_to_numpy(activation: Any, allow_unknown: bool = True) -> Any:
 
 
 class ReplayReLU(ReplayOperationBase):
-    handles = (ReLU, LeakyReLU, PReLU)
+    handles = (OpReLU, ReLU, LeakyReLU, PReLU, OpReLU)
 
     def call(self, inputs: FVArray) -> FVArray:
         op = self.op
-        if isinstance(op, ReLU):
+        if isinstance(op, (ReLU, OpReLU)):
             th, neg, maxv = op.threshold, op.negative_slope, op.max_value
         elif isinstance(op, LeakyReLU):
             th, neg, maxv = 0, op.negative_slope, None
