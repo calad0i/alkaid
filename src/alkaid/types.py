@@ -41,14 +41,14 @@ class QInterval(NamedTuple):
 class Precision(NamedTuple):
     """Fixed-point precision in KIF form: sign flag, integer bits, fractional bits."""
 
-    keep_negative: bool
+    signed: bool
     integers: int
     fractional: int
 
     @property
     def qint(self) -> QInterval:
         step = 2.0**-self.fractional
-        _min = -(2.0**self.integers) if self.keep_negative else 0.0
+        _min = -(2.0**self.integers) if self.signed else 0.0
         _max = 2.0**self.integers - step
         return QInterval(_min, _max, step)
 

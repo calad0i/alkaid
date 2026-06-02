@@ -1,88 +1,124 @@
-from itertools import accumulate
+from collections.abc import Sequence
+from typing import NamedTuple
 
-from ....types import CombLogic, Pipeline, QInterval
+import numpy as np
+
+from ....types import CombLogic, Pipeline, Precision, QInterval
 
 
-def hetero_io_map(qints: list[QInterval], merge: bool = False):
-    N = len(qints)
-    ks, _is, fs = zip(*(qint.kif for qint in qints))
-    Is = [_i + _k for _i, _k in zip(_is, ks)]
-    max_I, max_f = max(_is) + max(ks), max(fs)
-    max_bw = max_I + max_f
-    width_regular, width_packed = max_bw * N, sum(Is) + sum(fs)
+class BitMap(NamedTuple):
+    src: tuple[int, int]
+    dst: tuple[int, int]
 
-    regular: list[tuple[int, int]] = []
-    pads: list[tuple[int, int, int]] = []
+    def can_merge(self, other: 'BitMap'):
+        return self.src[1] == other.src[0] and self.dst[1] == other.dst[0]
 
-    bws = [I + f for I, f in zip(Is, fs)]
-    _bw = list(accumulate([0] + bws))
-    hetero = [(i - 1, j) for i, j in zip(_bw[1:], _bw[:-1])]
+    def merge(self, other: 'BitMap') -> 'BitMap':
+        return BitMap((self.src[0], other.src[1]), (self.dst[0], other.dst[1]))
 
-    for i in range(N):
-        base = max_bw * i
-        bias_low = max_f - fs[i]
-        bias_high = max_I - Is[i]
-        low = base + bias_low
-        high = (base + max_bw - 1) - bias_high
-        regular.append((high, low))
+    @property
+    def _type(self):
+        """0: const 0
 
-        if bias_low != 0:
-            pads.append((base + bias_low - 1, base, -1))
-        if bias_high != 0:
-            copy_from = hetero[i][0] if ks[i] else -1
-            pads.append((base + max_bw - 1, base + max_bw - bias_high, copy_from))
+        1: 1 to N copy (sign ext)
 
-    mask = list(high < low for high, low in hetero)
-    regular = [r for r, m in zip(regular, mask) if not m]
-    hetero = [h for h, m in zip(hetero, mask) if not m]
+        2: regular copy
+        """
+        w0, w1 = self.src[1] - self.src[0], self.dst[1] - self.dst[0]
+        if w0 == 0:
+            return 0
+        if w0 == w1:
+            return 2
+        assert w0 == 1
+        return 1
 
-    if not merge:
-        return regular, hetero, pads, (width_regular, width_packed)
 
-    # Merging consecutive intervals when possible
-    NN = len(regular) - 2
-    for i in range(NN, -1, -1):
-        this_high = regular[i][0]
-        next_low = regular[i + 1][1]
-        if next_low - this_high != 1:
-            continue
-        regular[i] = (regular[i + 1][0], regular[i][1])
-        regular.pop(i + 1)
-        hetero[i] = (hetero[i + 1][0], hetero[i][1])
-        hetero.pop(i + 1)
+def gen_io_map(precs0: Sequence[Precision], precs1: Sequence[Precision], merge: bool = False):
+    N = len(precs0)
+    assert len(precs1) == N
 
-    for i in range(len(pads) - 2, -1, -1):
-        if pads[i + 1][1] - pads[i][0] == 1 and pads[i][2] == pads[i + 1][2]:
-            pads[i] = (pads[i + 1][0], pads[i][1], pads[i][2])
-            pads.pop(i + 1)
+    bw_map = list[BitMap]()
+    idx0, idx1 = 0, 0
+    for p0, p1 in zip(precs0, precs1):
+        int0, frac0 = sum(p0[:2]), p0[2]
+        int1, frac1 = sum(p1[:2]), p1[2]
 
-    return regular, hetero, pads, (width_regular, width_packed)
+        n_rightpad = frac1 - frac0
+        if n_rightpad > 0:
+            bw_map.append(BitMap((-1, -1), (idx1, idx1 + n_rightpad)))
+            idx1 += n_rightpad
+        else:
+            idx0 -= n_rightpad
+
+        n_copy = min(int0, int1) + min(frac0, frac1)
+        if n_copy > 0:
+            bw_map.append(BitMap((idx0, idx0 + n_copy), (idx1, idx1 + n_copy)))
+            idx0 += n_copy
+            idx1 += n_copy
+
+        n_leftpad = int1 - int0
+        if n_leftpad > 0:
+            if p0.signed:
+                _map = BitMap((idx0 - 1, idx0), (idx1, idx1 + n_leftpad))
+            else:
+                _map = BitMap((-1, -1), (idx1, idx1 + n_leftpad))
+            idx1 += n_leftpad
+            bw_map.append(_map)
+        else:
+            idx0 -= n_leftpad
+
+    _reg_copy = [b for b in bw_map if b._type == 2]
+    _bcast_copy = [b for b in bw_map if b._type == 1]
+    _const_zero = [b for b in bw_map if b._type == 0]
+
+    if merge:
+        for i in range(len(_reg_copy) - 1, 0, -1):
+            left, right = _reg_copy[i - 1], _reg_copy[i]
+            if left.can_merge(right):
+                _reg_copy[i - 1] = left.merge(right)
+                _reg_copy.pop(i)
+        for i in range(len(_const_zero) - 1, 0, -1):
+            left, right = _const_zero[i - 1], _const_zero[i]
+            if left.can_merge(right):
+                _const_zero[i - 1] = left.merge(right)
+                _const_zero.pop(i)
+
+    bw_map = sorted(_reg_copy + _bcast_copy + _const_zero, key=lambda b: b.dst[0])
+    dsts = [b.dst for b in bw_map]
+    assert all(dsts[i][1] == dsts[i + 1][0] for i in range(len(dsts) - 1))
+    return bw_map, (idx0, idx1)
+
+
+def gen_io_map_sugar(qints: Sequence[QInterval], direction: str, merge: bool):
+    assert direction in ('inp', 'out')
+    precs = [qint.kif for qint in qints]
+    _kif = np.max(precs, axis=0)
+    precs_uniform = [Precision(bool(_kif[0]), int(_kif[1]), int(_kif[2]))] * len(precs)
+    precs0, precs1 = (precs_uniform, precs) if direction == 'inp' else (precs, precs_uniform)
+    return gen_io_map(precs0, precs1, merge=merge)
+
+
+def gen_assignments(map_out: list[BitMap], name_inp: str, name_out: str):
+    out_assignment = []
+    for (ii, ji), (io, jo) in map_out:
+        if ji - ii == jo - io:
+            out_assignment.append(f'assign {name_out}[{jo - 1}:{io}] = {name_inp}[{ji - 1}:{ii}];')
+        elif ji - ii == 1:
+            out_assignment.append(f'assign {name_out}[{jo - 1}:{io}] = {{{jo - io}{{{name_inp}[{ii}]}}}};')
+        else:
+            assert ii == ji == -1, f'Unexpected map_out entry: {(ii, ji), (io, jo)}'
+            out_assignment.append(f"assign {name_out}[{jo - 1}:{io}] = {jo - io}'b0;")
+    out_assignment_str = '\n    '.join(out_assignment)
+    return out_assignment_str
 
 
 def generate_io_wrapper(sol: CombLogic | Pipeline, module_name: str, pipelined: bool = False):
-    reg_in, het_in, _, shape_in = hetero_io_map(sol.inp_qint, merge=True)
-    reg_out, het_out, pad_out, shape_out = hetero_io_map(sol.out_qint, merge=True)
 
-    w_reg_in, w_het_in = shape_in
-    w_reg_out, w_het_out = shape_out
+    map_inp, (w_uniform_inp, w_inp) = gen_io_map_sugar(sol.inp_qint, direction='inp', merge=True)
+    map_out, (w_out, w_uniform_out) = gen_io_map_sugar(sol.out_qint, direction='out', merge=True)
 
-    inp_assignment = [f'assign packed_inp[{ih}:{jh}] = model_inp[{ir}:{jr}];' for (ih, jh), (ir, jr) in zip(het_in, reg_in)]
-    _out_assignment: list[tuple[int, str]] = []
-
-    for i, ((ih, jh), (ir, jr)) in enumerate(zip(het_out, reg_out)):
-        if ih == jh - 1:
-            continue
-        _out_assignment.append((ih, f'assign model_out[{ir}:{jr}] = packed_out[{ih}:{jh}];'))
-
-    for i, (i, j, copy_from) in enumerate(pad_out):
-        n_bit = i - j + 1
-        pad = f"{n_bit}'b0" if copy_from == -1 else f'{{{n_bit}{{packed_out[{copy_from}]}}}}'
-        _out_assignment.append((i, f'assign model_out[{i}:{j}] = {pad};'))
-    _out_assignment.sort(key=lambda x: x[0])
-    out_assignment = [v for _, v in _out_assignment]
-
-    inp_assignment_str = '\n    '.join(inp_assignment)
-    out_assignment_str = '\n    '.join(out_assignment)
+    inp_assignment_str = gen_assignments(map_inp, 'model_inp', 'packed_inp')
+    out_assignment_str = gen_assignments(map_out, 'packed_out', 'model_out')
 
     clk_and_rst_inp, clk_and_rst_bind = '', ''
     if pipelined:
@@ -93,12 +129,12 @@ def generate_io_wrapper(sol: CombLogic | Pipeline, module_name: str, pipelined: 
 
 module {module_name}_wrapper ({clk_and_rst_inp}
     // verilator lint_off UNUSEDSIGNAL
-    input [{w_reg_in - 1}:0] model_inp,
+    input [{w_uniform_inp - 1}:0] model_inp,
     // verilator lint_on UNUSEDSIGNAL
-    output [{w_reg_out - 1}:0] model_out
+    output [{w_uniform_out - 1}:0] model_out
 );
-    wire [{w_het_in - 1}:0] packed_inp;
-    wire [{w_het_out - 1}:0] packed_out;
+    wire [{w_inp - 1}:0] packed_inp;
+    wire [{w_out - 1}:0] packed_out;
 
     {inp_assignment_str}
 
