@@ -33,12 +33,18 @@ class BitMap(NamedTuple):
         return 1
 
 
-def gen_io_map(precs0: Sequence[Precision], precs1: Sequence[Precision], merge: bool = False):
+def gen_io_map(
+    precs0: Sequence[Precision],
+    precs1: Sequence[Precision],
+    merge: bool = False,
+    bias0: int = 0,
+    bias1: int = 0,
+) -> tuple[list[BitMap], tuple[int, int]]:
     N = len(precs0)
     assert len(precs1) == N
 
     bw_map = list[BitMap]()
-    idx0, idx1 = 0, 0
+    idx0, idx1 = bias0, bias1
     for p0, p1 in zip(precs0, precs1):
         int0, frac0 = sum(p0[:2]), p0[2]
         int1, frac1 = sum(p1[:2]), p1[2]

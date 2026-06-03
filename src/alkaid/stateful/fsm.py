@@ -85,11 +85,14 @@ class Signal:
         schedule: ModuloSchedule | None = None,
         mode: str = '',
         view_interval: tuple[int, int] | None = None,
+        attrs: str | None = None,
     ):
         assert mode in ('', 'r', 'w', 'rw'), 'Mode must be one of "", "r", "w", "rw"'
         if mode in ('r', 'w') and not exposed:
             assert rst_to is not None
         self._rst_to: tuple[float, ...] | None = None
+        if mode == 'r' and exposed:
+            assert not reg, 'Input signal cannot be register. Capture to internal reg if needed'
         if rst_to is not None:
             assert len(rst_to) == len(precisions), 'Reset value length must match precision length'
             self._rst_to = tuple(_quantize(x, *kif) for x, kif in zip(rst_to, precisions))
@@ -105,6 +108,7 @@ class Signal:
         self.mode = mode
         self.view_interval = view_interval or (0, len(precisions))
         self.schedule = ModuloSchedule(*schedule) if isinstance(schedule, Sequence) else schedule
+        self.attrs = attrs
 
     def __len__(self):
         return self.size
@@ -153,11 +157,12 @@ class Signal:
             self.reg,
             self.schedule.to_list() if self.schedule is not None else None,
             self.mode,
+            self.attrs,
         ]
 
     @classmethod
     def from_list(cls, lst: list) -> 'Signal':
-        name, exposed, precisions, _rst_if_name, rst_to, reg, schedule, mode = lst
+        name, exposed, precisions, _rst_if_name, rst_to, reg, schedule, mode, attrs = lst
         return cls(
             name,
             exposed,
@@ -167,6 +172,7 @@ class Signal:
             reg=reg,
             schedule=schedule,
             mode=mode,
+            attrs=attrs,
         )
 
     def __getitem__(self, idx: int | slice) -> 'Signal':
@@ -182,7 +188,7 @@ class Signal:
         return tuple(sum(prec) for prec in self.precisions)
 
     @property
-    def bits(self) -> int:
+    def width(self) -> int:
         return sum(self.bitwidths)
 
     @property
@@ -243,8 +249,8 @@ class Conn:
 def _comb_io_signals(name: str, comb: CombLogic) -> tuple[Signal, Signal]:
     prec_in = tuple(qint.kif for qint in comb.inp_qint)
     prec_out = tuple(qint.kif for qint in comb.out_qint)
-    sig_in = Signal(f'~{name}:in', False, prec_in, reg=False)
-    sig_out = Signal(f'~{name}:out', False, prec_out, reg=False)
+    sig_in = Signal(f'__{name}_in', False, prec_in, reg=False)
+    sig_out = Signal(f'__{name}_out', False, prec_out, reg=False)
     return sig_in, sig_out
 
 
@@ -283,8 +289,8 @@ def _remove_const_logic(logic: dict[str, CombLogic], conns: Sequence[Conn]) -> t
             continue
         rst_to = tuple(map(float, comb([], quantize=False)))
         precisions = tuple(qint.kif for qint in comb.out_qint)
-        const_signals[f'~{name}:out'] = Signal(
-            f'~{name}:const',
+        const_signals[f'__{name}_out'] = Signal(
+            f'__{name}_const',
             exposed=False,
             precisions=precisions,
             rst_if=None,
@@ -354,7 +360,7 @@ class FSM:
 
     @property
     def internal_signals(self) -> tuple[Signal, ...]:
-        return tuple(sig for sig in self.signals.values() if not sig.exposed)
+        return tuple(sorted([sig for sig in self.signals.values() if not sig.exposed], key=lambda s: (s.reg, s.name)))
 
     def _set_signals(self, conns: Sequence[Conn]):
         signals: dict[str, Signal] = {}
@@ -454,10 +460,10 @@ class FSMEmu:
         self.buffers = {sig.name: Buffer(sig, dtype=np.float64) for sig in self.fsm.signals.values()}
 
     def _eval_buf(self, name: str):
-        if not (name.startswith('~') and name.endswith(':out')):
+        if not (name.startswith('__') and name.endswith('_out')):
             return self.buffers[name]
-        base = name[1:-4]
-        sig_in_name = f'~{base}:in'
+        base = name[2:-4]
+        sig_in_name = f'__{base}_in'
         val_in = self.buffers[sig_in_name]
         if not val_in._changed:
             return self.buffers[name]

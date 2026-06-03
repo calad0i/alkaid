@@ -6,7 +6,7 @@ def pipeline_logic_gen(
     csol: Pipeline,
     name: str,
     print_latency=False,
-    timescale: str | None = None,
+    timescale: str | None = '`timescale 1 ns / 1 ps',
     comb_logic_gen_fn=None,
     no_shreg: bool = False,
 ):

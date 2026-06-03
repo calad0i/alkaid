@@ -21,7 +21,7 @@ def topo_check_and_sort(conns: Sequence[Conn]) -> list[Conn]:
 
     Dependencies are tracked at *interval* granularity rather than per signal, so
     e.g. ``A[0:10] = B`` together with ``B[10:20] = A`` is not a loop -- the bits
-    do not overlap.  Combinational-logic ports ``~name:in`` / ``~name:out`` are
+    do not overlap.  Combinational-logic ports ``__name_in`` / ``__name_out`` are
     contracted into one node: every output bit is assumed to depend on every
     input bit, so reading any output bit waits on writing any input bit.
 
@@ -33,9 +33,8 @@ def topo_check_and_sort(conns: Sequence[Conn]) -> list[Conn]:
     n = len(conns)
 
     def _node(name: str) -> tuple[str, bool]:
-        # contract ~name:in / ~name:out into a single node; second value flags it
-        if name.startswith('~'):
-            base, sep, port = name.rpartition(':')
+        if name.startswith('__'):
+            base, sep, port = name.rpartition('_')
             if sep and port in ('in', 'out'):
                 return base, True
         return name, False

@@ -9,14 +9,14 @@ def pipeline_to_fsm(pipe: Pipeline, reg_inp=True, reg_out=True) -> FSM:
     inp_precisions = tuple(qint.kif for qint in pipe.inp_qint)
     out_precisions = tuple(qint.kif for qint in pipe.out_qint)
 
+    conns: list[Conn] = []
     inp_sig = Signal(
         'model_inp',
         True,
         inp_precisions,
-        reg=reg_inp,
+        reg=False,
         mode='r',
         schedule=ModuloSchedule((0,), 1),
-        rst_to=tuple(0.0 for _ in inp_precisions),
     )
     out_sig = Signal(
         'model_out',
@@ -24,9 +24,19 @@ def pipeline_to_fsm(pipe: Pipeline, reg_inp=True, reg_out=True) -> FSM:
         out_precisions,
         reg=reg_out,
         mode='w',
-        schedule=ModuloSchedule((lat - 1 + reg_out,), 1),
-        rst_to=tuple(0.0 for _ in out_precisions),
+        schedule=ModuloSchedule((lat - 1 + reg_out + reg_inp,), 1),
     )
+
+    if reg_inp:
+        inp_sig_reg = Signal(
+            'model_inp_reg',
+            False,
+            inp_precisions,
+            reg=True,
+            mode='rw',
+        )
+        conns.append(Conn(inp_sig, inp_sig_reg))
+        inp_sig = inp_sig_reg
 
     ports: list[Signal] = [inp_sig]
     for i in range(1, lat):
@@ -35,7 +45,6 @@ def pipeline_to_fsm(pipe: Pipeline, reg_inp=True, reg_out=True) -> FSM:
     ports.append(out_sig)
 
     logic: dict[str, CombLogic] = {}
-    conns: list[Conn] = []
     for i in range(lat):
         comb = pipe.solutions[i]
         n_in, n_out = comb.shape
