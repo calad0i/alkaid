@@ -242,15 +242,9 @@ def generate_io_wrapper(fsm: FSM, module_name: str, timescale: str | None = '`ti
     for sig in fsm.inp_signals:
         map_inp, _ = gen_io_map_sugar(sig.precisions, direction='inp', merge=True)
         assignments += gen_assignments(map_inp, sig.name, f'{sig.name}_packed', False)
-    print('========================================')
-    print(assignments)
     for sig in fsm.out_signals:
         map_out, _ = gen_io_map_sugar(sig.precisions, direction='out', merge=True)
         assignments += gen_assignments(map_out, f'{sig.name}_packed', sig.name, False)
-    print('========================================')
-    print(assignments)
-    print(fsm.inp_signals)
-    print(fsm.out_signals)
 
     clocked = any(sig.reg for sig in fsm.signals.values())
     port_assignments = [f'.{signal.name}({signal.name}_packed)' for signal in fsm.inp_signals + fsm.out_signals]
