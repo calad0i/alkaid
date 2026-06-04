@@ -1,8 +1,11 @@
+from collections.abc import Sequence
+
 import numpy as np
 
 from ....stateful import FSM, Conn, Signal
+from ....types import Precision
 from .comb import comb_logic_gen
-from .io_wrapper import BitMap, gen_io_map
+from .io_map import BitMap, gen_io_map
 
 
 def _rst_bin(sig: Signal) -> str:
@@ -41,16 +44,16 @@ def gen_assignments(
 
     assignments = []
     for (ii, ji), (io, jo) in map_out:
-        name_out = _name(name_out, io, jo, out_offset)
+        _name_out = _name(name_out, io, jo, out_offset)
         if ji - ii == jo - io:
-            name_inp = _name(name_inp, ii, ji, inp_offset)
+            _name_inp = _name(name_inp, ii, ji, inp_offset)
         elif ji - ii == 1:
             bit = f'{name_inp}[{ii} + {inp_offset}]' if inp_offset is not None else f'{name_inp}[{ii}]'
-            name_inp = f'{{{jo - io}{{{bit}}}}}'
+            _name_inp = f'{{{jo - io}{{{bit}}}}}'
         else:
             assert ii == ji == -1, f'Unexpected map_out entry: {(ii, ji), (io, jo)}'
-            name_inp = f"{jo - io}'b0"
-        assignments.append(to_assign_str(name_inp, name_out))
+            _name_inp = f"{jo - io}'b0"
+        assignments.append(to_assign_str(_name_inp, _name_out))
     return assignments
 
 
@@ -102,6 +105,39 @@ def gen_assignments_conn(conn: Conn) -> str:
         return block
 
 
+def _padded_prec(prec: Sequence[Precision]) -> Precision:
+    kif = np.max(prec, axis=0)
+    return Precision(bool(kif[0]), int(kif[1]), int(kif[2]))
+
+
+def _to_def_str(sig: Signal, pad=False) -> str:
+    if not pad:
+        width = sig.width
+    else:
+        width = sig.size * sum(_padded_prec(sig.precisions))
+    if sig.reg:
+        _type = 'reg' if not sig.attrs else f'{sig.attrs} reg'
+    else:
+        _type = 'wire' if not sig.attrs else f'{sig.attrs} wire'
+    return f'{_type} [{width - 1}:0] {sig.name}'
+
+
+def to_header(fsm: FSM, name: str, pad: bool):
+    inputs = [f'input {_to_def_str(sig, pad)}' for sig in fsm.inp_signals]
+    if pad:
+        inputs = ['// verilator lint_off UNUSEDSIGNAL'] + inputs + ['// verilator lint_on UNUSEDSIGNAL']
+
+    need_clk = any(sig.reg for sig in fsm.signals.values())
+    if need_clk:
+        inputs = ['input clk'] + inputs
+
+    outputs = [f'output {_to_def_str(sig, pad)}' for sig in fsm.out_signals]
+
+    io_defs = ',\n    '.join(inputs + outputs)
+    module_header = f'module {name} (\n    {io_defs}\n);'
+    return module_header
+
+
 def fsm_logic_gen(
     fsm: FSM,
     name: str,
@@ -112,14 +148,6 @@ def fsm_logic_gen(
 ):
     comb_logic_gen_fn = comb_logic_gen_fn or comb_logic_gen
 
-    def _to_def_str(sig: Signal) -> str:
-        width = sig.width
-        if sig.reg:
-            _type = 'reg' if not sig.attrs else f'{sig.attrs} reg'
-        else:
-            _type = 'wire' if not sig.attrs else f'{sig.attrs} wire'
-        return f'{_type} [{width - 1}:0] {sig.name}'
-
     if no_shreg:
         for sig in fsm.signals.values():
             if not sig.reg:
@@ -128,14 +156,7 @@ def fsm_logic_gen(
 
     # header def
 
-    inputs = [f'input {_to_def_str(sig)}' for sig in fsm.inp_signals]
-    outputs = [f'output {_to_def_str(sig)}' for sig in fsm.out_signals]
-
-    need_clk = any(sig.reg for sig in fsm.signals.values())
-    if need_clk:
-        inputs = ['input clk'] + inputs
-    io_defs = ',\n    '.join(inputs + outputs)
-    module_header = f'module {name} (\n    {io_defs}\n);'
+    module_header = to_header(fsm, name, False)
 
     # signal declare
 
@@ -204,3 +225,42 @@ def fsm_logic_gen(
     assert name not in ret, f'FSM name {name} conflicts with logic name'
     ret[name] = module
     return ret
+
+
+def gen_io_map_sugar(precs: Sequence[Precision], direction: str, merge: bool):
+    assert direction in ('inp', 'out')
+    precs_uniform = [_padded_prec(precs)] * len(precs)
+    precs0, precs1 = (precs_uniform, precs) if direction == 'inp' else (precs, precs_uniform)
+    return gen_io_map(precs0, precs1, merge=merge)
+
+
+def generate_io_wrapper(fsm: FSM, module_name: str, timescale: str | None = '`timescale 1 ns / 1 ps'):
+
+    header = to_header(fsm, f'{module_name}_wrapper', True)
+    declares = [f'wire [{signal.width - 1}:0] {signal.name}_packed;' for signal in fsm.inp_signals + fsm.out_signals]
+    assignments = []
+    for sig in fsm.inp_signals:
+        map_inp, _ = gen_io_map_sugar(sig.precisions, direction='inp', merge=True)
+        assignments += gen_assignments(map_inp, sig.name, f'{sig.name}_packed', False)
+    print('========================================')
+    print(assignments)
+    for sig in fsm.out_signals:
+        map_out, _ = gen_io_map_sugar(sig.precisions, direction='out', merge=True)
+        assignments += gen_assignments(map_out, f'{sig.name}_packed', sig.name, False)
+    print('========================================')
+    print(assignments)
+    print(fsm.inp_signals)
+    print(fsm.out_signals)
+
+    clocked = any(sig.reg for sig in fsm.signals.values())
+    port_assignments = [f'.{signal.name}({signal.name}_packed)' for signal in fsm.inp_signals + fsm.out_signals]
+    if clocked:
+        port_assignments = ['.clk(clk)'] + port_assignments
+    port_assignments_str = ',\n        '.join(port_assignments)
+    port_assignments_str = f'{module_name} {module_name}_inst (\n        {port_assignments_str}\n    );'
+
+    module_body = '\n    '.join(declares) + '\n\n    ' + '\n    '.join(assignments) + '\n\n    ' + port_assignments_str
+    module = f'{header}\n\n{module_body}\n\nendmodule\n'
+    if timescale:
+        module = f'{timescale}\n\n{module}'
+    return module
