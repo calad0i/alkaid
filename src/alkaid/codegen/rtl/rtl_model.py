@@ -79,6 +79,52 @@ def canon_name(name: str) -> str:
     return re.sub(r'\W|^(?=\d)', '_', name)
 
 
+def verilator_warn_suppression() -> str:
+    """empty always warning suppression for ghdl converted verilog..."""
+    out = subprocess.run(['verilator', '--version'], capture_output=True, text=True, check=True).stdout
+    version = float(re.search(r'Verilator\s+([\d\.]+)', out).groups()[0])  # type: ignore
+    return '-Wno-ALWNEVER' if version >= 5.044 else ''
+
+
+def run_make_build(
+    sim_dir: str | Path,
+    makefile: str,
+    env: dict[str, str],
+    *,
+    fast: bool = False,
+    clean: bool = True,
+    verbose: bool = False,
+    stale_lib_re: 're.Pattern[str] | None' = None,
+) -> None:
+    """Build a Verilator emulator shared library via ``make -f <makefile>`` in ``sim_dir``.
+
+    When ``clean`` is set, stale ``.so`` files matching ``stale_lib_re`` are removed and
+    ``make clean`` is run first; then ``make`` (the ``fast`` target if requested), and
+    finally ``obj_dir`` is dropped. Captured stderr/stdout is printed on failure.
+    """
+    sim_dir = Path(sim_dir)
+    args = ['make', '-f', makefile]
+    if fast:
+        args.append('fast')
+
+    if clean:
+        if stale_lib_re is not None:
+            for p in sim_dir.iterdir():
+                if not p.is_dir() and stale_lib_re.match(p.name):
+                    p.unlink()
+        subprocess.run(['make', '-f', makefile, 'clean'], env=env, cwd=sim_dir, check=True, capture_output=not verbose)
+
+    try:
+        subprocess.run(args, env=env, check=True, cwd=sim_dir, capture_output=not verbose)
+    except subprocess.CalledProcessError as e:
+        print(e.stderr.decode(), file=sys.stderr)
+        print(e.stdout.decode(), file=sys.stdout)
+        raise RuntimeError('Compilation failed!!') from e
+
+    if clean:
+        subprocess.run(['rm', '-rf', 'obj_dir'], cwd=sim_dir, check=True, capture_output=not verbose)
+
+
 def verilog_comb_logic_gen_xls(sol: CombLogic, fn_name: str, print_latency: bool = False, timescale: str | None = None):
     from ..xls.xls_codegen import build_xls_function
 
@@ -340,45 +386,18 @@ class RTLModel:
         """
 
         self._uuid = str(uuid4())
-        args = ['make', '-f', 'build_binder.mk']
         env = os.environ.copy()
         env['VM_PREFIX'] = f'{self._prj_name}_wrapper'
         env['STAMP'] = self._uuid
         env['EXTRA_CXXFLAGS'] = '-fopenmp' if openmp else ''
-        verilator_version_str = subprocess.run(['verilator', '--version'], capture_output=True, text=True, check=True).stdout
-        verilator_version = float(re.search(r'Verilator\s+([\d\.]+)', verilator_version_str).groups()[0])  # type: ignore
-        warn_suppression = '-Wno-ALWNEVER' if verilator_version >= 5.044 else ''
-        env['VERILATOR_FLAGS'] = '-Wall' if self._flavor == 'verilog' else warn_suppression
+        env['VERILATOR_FLAGS'] = '-Wall' if self._flavor == 'verilog' else verilator_warn_suppression()
         if _env is not None:
             env.update(_env)
         if nproc is not None:
             env['N_JOBS'] = str(nproc)
-        if o3:
-            args.append('fast')
 
-        if clean:
-            m = re.compile(r'^lib.*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.so$')
-            for p in (self._path / 'sim').iterdir():
-                if not p.is_dir() and m.match(p.name):
-                    p.unlink()
-            subprocess.run(
-                ['make', '-f', 'build_binder.mk', 'clean'],
-                env=env,
-                cwd=self._path / 'sim',
-                check=True,
-                capture_output=not verbose,
-            )
-
-        try:
-            subprocess.run(args, env=env, check=True, cwd=self._path / 'sim', capture_output=not verbose)
-        except subprocess.CalledProcessError as e:
-            print(e.stderr.decode(), file=sys.stderr)
-            print(e.stdout.decode(), file=sys.stdout)
-            raise RuntimeError('Compilation failed!!') from e
-
-        if clean:
-            subprocess.run(['rm', '-rf', 'obj_dir'], cwd=self._path / 'sim', check=True, capture_output=not verbose)
-
+        stale = re.compile(r'^lib.*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.so$') if clean else None
+        run_make_build(self._path / 'sim', 'build_binder.mk', env, fast=o3, clean=clean, verbose=verbose, stale_lib_re=stale)
         self._load_lib(self._uuid)
 
     def _load_lib(self, uuid: str | None = None):

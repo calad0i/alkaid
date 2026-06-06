@@ -1,7 +1,41 @@
 #include "verilated.h"
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <vector>
+
+// --- Fixed-point <-> double scalar casts (shared by the comb/pipeline binder and the
+// FSM binder).  Precision is passed as template parameters so the scale factor folds to
+// a compile-time constant and the SIMD batch loops in binder_util.hh stay vectorizable.
+inline int64_t _sign_ext(uint64_t v, int bw) {
+    uint64_t sign_bit = uint64_t(1) << (bw - 1);
+    uint64_t ext_mask = ~((uint64_t(1) << bw) - 1);
+    if (v & sign_bit) {
+        v |= ext_mask;
+    }
+    return static_cast<int64_t>(v);
+}
+
+template <int FRAC> inline int64_t fp_to_int(double v) {
+    static const double scale = std::ldexp(1.0, FRAC);
+    return static_cast<int64_t>(std::floor(v * scale));
+}
+
+template <bool SGN, int FRAC, int BW> inline double int_to_fp(int64_t raw) {
+    static const double scale_inv = std::ldexp(1.0, -FRAC);
+    double dv;
+    if constexpr (SGN && BW < 64) {
+        dv = static_cast<double>(_sign_ext(static_cast<uint64_t>(raw), BW));
+    }
+    else if constexpr (SGN) {
+        dv = static_cast<double>(raw);
+    }
+    else {
+        dv = static_cast<double>(static_cast<uint64_t>(raw));
+    }
+    return dv * scale_inv;
+}
+
 template <size_t bw, size_t N_in> std::vector<int32_t> bitpack(const int64_t *values) {
     static_assert(bw > 0 && bw <= 64, "Bit width must be between 1 and 64");
 

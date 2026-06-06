@@ -1,5 +1,4 @@
 #include "ioutil.hh"
-#include <cmath>
 #include <verilated.h>
 #include <vector>
 
@@ -10,36 +9,17 @@ constexpr bool _openmp = true;
 constexpr bool _openmp = false;
 #endif
 
-inline int64_t _sign_ext(uint64_t v, int bw) {
-    uint64_t sign_bit = uint64_t(1) << (bw - 1);
-    uint64_t ext_mask = ~((uint64_t(1) << bw) - 1);
-    if (v & sign_bit) {
-        v |= ext_mask;
-    }
-    return static_cast<int64_t>(v);
-}
-
 template <typename CONFIG_T, typename T> static inline int64_t _fp_to_int(T v) {
-    static const double scale = std::ldexp(1.0, CONFIG_T::f_in);
-    return static_cast<int64_t>(std::floor(static_cast<double>(v) * scale));
+    return fp_to_int<CONFIG_T::f_in>(static_cast<double>(v));
 }
 
 template <typename CONFIG_T, typename T> static inline T _int_to_fp(int64_t v) {
-    static const double scale_inv = std::ldexp(1.0, -CONFIG_T::f_out);
     constexpr int bw_out = CONFIG_T::k_out + CONFIG_T::i_out + CONFIG_T::f_out;
-    double dv;
-    if constexpr (CONFIG_T::k_out) {
-        dv = static_cast<double>(_sign_ext(v, bw_out));
-    }
-    else {
-        dv = static_cast<double>(static_cast<uint64_t>(v));
-    }
-    return static_cast<T>(dv * scale_inv);
+    return static_cast<T>(int_to_fp<static_cast<bool>(CONFIG_T::k_out), CONFIG_T::f_out, bw_out>(v));
 }
 
 template <typename CONFIG_T, typename T>
 static inline void fp_to_int_vec(const T *in_fp, std::vector<int64_t> &in_int) {
-    constexpr int bw_in = CONFIG_T::k_in + CONFIG_T::i_in + CONFIG_T::f_in;
 #ifdef _OPENMP
 #pragma omp simd
 #endif
@@ -50,7 +30,6 @@ static inline void fp_to_int_vec(const T *in_fp, std::vector<int64_t> &in_int) {
 
 template <typename CONFIG_T, typename T>
 static inline void int_vec_to_fp(const std::vector<int64_t> &out_int, T *c_out) {
-    constexpr int bw_out = CONFIG_T::k_out + CONFIG_T::i_out + CONFIG_T::f_out;
 #ifdef _OPENMP
 #pragma omp simd
 #endif
