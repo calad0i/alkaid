@@ -565,7 +565,7 @@ class FSMEmu:
                 self.buffers[name]._changed = buf._changed
         self._t += 1
 
-    def reset(self):
+    def soft_reset(self):
         for sig in self.fsm.signals.values():
             if sig.reg and sig.rst_to is not None:
                 self.buffers[sig.name][:] = sig.rst_to
@@ -668,5 +668,5 @@ class FSMEmu:
         assert len(_period) == 1, 'All signals must have the same schedule period'
         extra_steps = max(port.schedule.bias for port in self.fsm.out_signals)  # type: ignore
 
-        self.reset()
+        self.soft_reset()
         return self.run(data, extra_steps=extra_steps - 1, scheduled=True, output_only=True)
