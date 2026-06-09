@@ -28,6 +28,7 @@ def to_alkaid(
     no_shreg: bool = False,
     opt: bool = True,
     n_stages: int = -1,
+    no_ternary: bool = False,
 ):
     from alkaid.codegen import HLSModel, RTLModel
     from alkaid.converter import trace_model
@@ -108,6 +109,7 @@ def to_alkaid(
             clock_period=period,
             part_name=part_name,
             n_stages=n_stages,
+            ternary_fuse=not no_ternary,
         )
         da_model.write(metadata, xls_opt=xls_opt, no_shreg=no_shreg)
     else:
@@ -120,6 +122,7 @@ def to_alkaid(
             clock_uncertainty=unc / 100,
             clock_period=period,
             part_name=part_name,
+            ternary_fuse=not no_ternary,
         )
         da_model.write(metadata)
     if verbose > 1:
@@ -231,6 +234,7 @@ def convert_main(args):
         no_shreg=args.no_shreg,
         opt=not args.no_opt,
         n_stages=args.n_stages,
+        no_ternary=args.no_ternary,
     )
 
 
@@ -306,6 +310,11 @@ def _add_convert_args(parser: argparse.ArgumentParser):
         '--no-opt',
         action='store_true',
         help='Disable optimization pass on the traced CombLogic before code generation. IR without optimization is usually not ready for code generation and will likely cause errors. Only use this if you know what you are doing.',
+    )
+    parser.add_argument(
+        '--no-ternary',
+        action='store_true',
+        help='Disable ternary adder fusion optimization pass in codegen',
     )
 
 
