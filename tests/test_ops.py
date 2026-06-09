@@ -8,13 +8,16 @@ from alkaid._binary import alir_interp_run_json_file
 from alkaid.codegen import HLSModel, RTLModel
 from alkaid.trace import FVArray, trace
 from alkaid.trace.ops import quantize, relu
-from alkaid.trace.passes import optimize
+from alkaid.trace.passes import dead_code_elimin, fuse_ternary_adders, optimize
 from alkaid.types import CombLogic
 
 
 class OperationTest:
     def test_eq(self, op_func, test_data: np.ndarray, comb: CombLogic, n_samples: int):
         traced_out = comb.predict(test_data, n_threads=1)
+        comb2 = dead_code_elimin(fuse_ternary_adders(comb))
+        traced_out2 = comb2.predict(test_data, n_threads=1)
+        np.testing.assert_equal(traced_out, traced_out2)
         expected_out = quantize(op_func(quantize(test_data, *comb.inp_kifs)).reshape(n_samples, -1), 1, 12, 12)
         np.testing.assert_equal(traced_out, expected_out)
 
