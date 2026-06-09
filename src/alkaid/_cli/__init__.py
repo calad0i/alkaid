@@ -3,7 +3,6 @@ import argparse
 from .. import _version
 from .convert import _add_convert_args, convert_main
 from .report import _add_report_args, report_main
-from .upgrade import _add_upgrade_args, upgrade_main
 
 
 def main():
@@ -14,10 +13,8 @@ def main():
         'convert', help='Convert a Keras, ALIR JSON, or ALIR JSON.GZ model to a codegen project'
     )
     report_parser = subparsers.add_parser('report', help='Generate reports from existing RTL/HLS projects')
-    upgrade_parser = subparsers.add_parser('upgrade', help='Upgrade ALIR v2 JSON or JSON.GZ to v3')
     _add_convert_args(convert_parser)
     _add_report_args(report_parser)
-    _add_upgrade_args(upgrade_parser)
     parser.add_argument('--version', '-v', action='version', version=f'%(prog)s {_version.__version__}')
     args = parser.parse_args()
 
@@ -26,8 +23,6 @@ def main():
             convert_main(args)
         case 'report':
             report_main(args)
-        case 'upgrade':
-            upgrade_main(args)
         case _:
             parser.print_help()
             exit(1)
