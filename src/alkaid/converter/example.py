@@ -1,27 +1,23 @@
 import numpy as np
 
 from ..trace import FVArray
-from ..trace.ops import quantize, relu
+from ..trace.ops import quantize
 from .plugin import ALIRTracerPluginBase
 
 
-def operation(inp):
-    """An example operation to be traced. One can use numpy-based operations along
-    with ALIR traceable operations provided in `alkaid.trace.ops`.
-    """
-    w = np.arange(-60, 60).reshape(4, 5, 6).astype(np.float32) / 2**7
-    inp = quantize(inp, 1, 7, 0)  # Input must be quantized before any non-trivial operation
-    out1 = relu(inp)  # Only activation supported for now; can attach quantization at the same time
-
-    # many native numpy operations are supported
-    out2 = inp[:, 1:3].transpose()
-    out2 = quantize(np.sin(out2), 1, 0, 7, 'SAT', 'RND')
-    out2 = np.repeat(out2, 2, axis=0) * 3 + 4
-    out2 = np.amax(np.stack([out2, -out2 * 2], axis=0), axis=0)
-
-    out3 = quantize(out2 @ out1, 1, 10, 2)  # can also be einsum here
-    out = np.einsum('ijk,ij->ik', w, out3)  # CMVM optimization is performed for all
-    return out
+def operation(x):  # x[16,4]
+    x = quantize(x, 1, 8, 4)
+    a = np.maximum(x, 0)
+    b = x[:, 1::2].T
+    c = np.round(np.sin(b) * np.pi)
+    d = np.repeat(c, 2, axis=0) * 3 + 4
+    e = np.max(np.stack([d, -d * 2], axis=0), axis=0)
+    f = c @ e.T
+    g = np.einsum('ij,kj->ik', c, d)
+    h = np.sum(g, axis=0)
+    idx = np.argsort(h)[:2]
+    j = h[idx].ravel()
+    return j[None] + f[..., None] + a[-2::-4, :2] + ((a[0, -2:] > 0) & (a[-1, :2] > 0))
 
 
 class ExampleModel:
