@@ -36,7 +36,7 @@ def ternary_layout(sol: CombLogic, op_idx: int) -> TernaryLayout:
         TernaryTerm(
             addr=idx,
             width=widths[idx],
-            signed=int(kifs[idx].keep_negative),
+            signed=int(kifs[idx].signed),
             negate=int(sign < 0),
             pad=align_f - term_frac,
         )

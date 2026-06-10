@@ -12,8 +12,8 @@ class _Score(tuple[int, int, int, int, int]):
 
 
 def _width(op: Op) -> int:
-    keep_negative, integers, fractional = op.qint.kif
-    return int(keep_negative) + int(integers) + int(fractional)
+    signed, integers, fractional = op.qint.kif
+    return int(signed) + int(integers) + int(fractional)
 
 
 def _edge_score(ops: list[Op], _root_idx: int, child_idx: int) -> _Score:

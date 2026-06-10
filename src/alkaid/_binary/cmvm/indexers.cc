@@ -38,10 +38,10 @@ static inline int8_t qint_to_bw(const QInterval &q) {
     if (q.min == q.max && q.min == 0) {
         return 0;
     }
-    int8_t keep_negative = q.min < 0 ? 1 : 0;
+    int8_t _signed = q.min < 0 ? 1 : 0;
     float _min = q.min / q.step, _max = q.max / q.step;
     int8_t mbits = std::max(iceil_log2(_min), iceil_log2(_max + 1));
-    return mbits + keep_negative;
+    return mbits + _signed;
 }
 
 std::tuple<int8_t, int8_t, int8_t>

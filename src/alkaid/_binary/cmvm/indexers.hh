@@ -38,7 +38,7 @@ minimal_kif_one(double qmin, double qmax, double qstep, int32_t &out_k, int32_t 
     out_f = fractional;
 }
 
-// Writes n × 3 int32: [keep_negative, integers, fractionals] per entry.
+// Writes n × 3 int32: [_signed, integers, fractionals] per entry.
 inline void
 minimal_kif_batch(const double *qmins, const double *qmaxs, const double *qsteps, int32_t *out, size_t n) {
     for (size_t i = 0; i < n; ++i) {

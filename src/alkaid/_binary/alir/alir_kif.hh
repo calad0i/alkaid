@@ -23,7 +23,7 @@ namespace alir {
     inline DType minimal_kif(double qmin, double qmax, double qstep) {
         if (qmin == 0.0 && qmax == 0.0)
             return DType{0, 0, 0};
-        const int32_t keep_negative = (qmin < 0.0) ? 1 : 0;
+        const int32_t _signed = (qmin < 0.0) ? 1 : 0;
         const int32_t fractional = -iceil_log2_f32(static_cast<float>(qstep));
         const int64_t int_min = static_cast<int64_t>(std::llround(qmin / qstep));
         const int64_t int_max = static_cast<int64_t>(std::llround(qmax / qstep));
@@ -36,7 +36,7 @@ namespace alir {
         if (bits_arg > 0)
             bits = iceil_log2_f32(static_cast<float>(bits_arg));
         const int32_t integers = bits - fractional;
-        return DType{keep_negative, integers, fractional};
+        return DType{_signed, integers, fractional};
     }
 
     // Mirror of Python LookupTable._get_pads, pad_left only.
