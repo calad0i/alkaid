@@ -10,7 +10,7 @@ from typing import TypeVar
 
 import numpy as np
 
-from ..types import ALIR_SPEC_VERSION, CombLogic, JSONEncoder, Precision, QInterval, _quantize
+from ..types import ALIR_SPEC_VERSION, CombLogic, JSONEncoder, Precision, _quantize
 from .ordering import topo_check_and_sort
 
 
@@ -129,15 +129,6 @@ class Signal:
         self.attrs = attrs
         self._dynamic_bias = _dynamic_bias
 
-    def __len__(self):
-        return self.size
-
-    def read(self):
-        self.mode = 'r' + self.mode if 'r' not in self.mode else self.mode
-
-    def write(self):
-        self.mode = self.mode + 'w' if 'w' not in self.mode else self.mode
-
     @property
     def jump_width(self) -> int:
         if self._dynamic_bias is None:
@@ -151,7 +142,7 @@ class Signal:
 
     @property
     def raw(self) -> 'Signal':
-        if len(self.view) == (0, len(self._precisions)):
+        if self.view == (0, len(self._precisions)):
             return self
         r = copy(self)
         r._view = (0, len(self._precisions))
@@ -165,13 +156,6 @@ class Signal:
     @property
     def size(self) -> int:
         return len(self.precisions)
-
-    @property
-    def qint(self) -> tuple[QInterval, ...]:
-        return tuple(prec.qint for prec in self.precisions)
-
-    def to_dict(self) -> dict:
-        return self.__dict__
 
     def to_list(self) -> list:
         """Serialize the full (un-sliced) signal to JSON-native types.
@@ -295,8 +279,7 @@ def _check_single_assignment(conns: Sequence[Conn]):
     for name, ws in writes.items():
         ws.sort()
         for (s0, e0, i0), (s1, e1, i1) in zip(ws, ws[1:]):
-            if e0 > s1:
-                raise ValueError(f'Double assignment on {name}[{max(s0, s1)}:{min(e0, e1)}] by conns #{i0} and #{i1}')
+            assert e0 < s1, f'Double assignment on {name}[{max(s0, s1)}:{min(e0, e1)}] by conns #{i0} and #{i1}'
 
 
 class Buffer(np.ndarray):
