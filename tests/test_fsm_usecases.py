@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from alkaid.codegen.rtl.fsm_model import FSMProject
-from alkaid.stateful import FSM, Conn, Signal
+from alkaid.stateful import FSM, Conn, ModuloSchedule, Signal
 from alkaid.stateful.fsm import FSMEmu, _comb_io_signals
 from alkaid.trace import FVArray, trace
 from alkaid.trace.ops import quantize
@@ -17,19 +17,40 @@ def _require_verilator():
         pytest.skip('verilator not found')
 
 
-def _fsmemu_run(fsm: FSM, data: dict, steps: int) -> dict[str, np.ndarray]:
-    """Cycle-accurate Python reference: drive inputs, eval/tick/eval, capture outputs."""
-    emu = FSMEmu(fsm)
-    emu.soft_reset()
-    out = {p.name: np.empty((steps, p.size), dtype=np.float64) for p in fsm.out_signals}
+def _fsmemu_step_run(emu: FSMEmu, data: dict, steps: int) -> dict[str, np.ndarray]:
+    """Cycle-accurate Python reference from the emulator's current state."""
+    out = {p.name: np.empty((steps, p.size), dtype=np.float64) for p in emu.fsm.out_signals}
     for step in range(steps):
-        for p in fsm.inp_signals:
+        for p in emu.fsm.inp_signals:
             emu.buffers[p.name][:] = data[p.name][step]
         emu.eval()
         emu.tick()
         emu.eval()
-        for p in fsm.out_signals:
+        for p in emu.fsm.out_signals:
             out[p.name][step] = emu.buffers[p.name]
+    return out
+
+
+def _fsmemu_run(fsm: FSM, data: dict, steps: int) -> dict[str, np.ndarray]:
+    emu = FSMEmu(fsm)
+    emu.soft_reset()
+    return _fsmemu_step_run(emu, data, steps)
+
+
+def _rtl_step_run(emu: FSMProject, data: dict, steps: int) -> dict[str, np.ndarray]:
+    """Exercise the RTL binder's scalar step API from the DUT's current state."""
+    data = {k: np.asarray(v, dtype=np.float64) for k, v in data.items()}
+    out = {p.name: np.empty((steps, p.size), dtype=np.float64) for p in emu.fsm.out_signals}
+    for step in range(steps):
+        for p in emu.fsm.inp_signals:
+            samples = data[p.name]
+            value = samples[step] if samples.ndim == 1 and p.size == 1 else samples.reshape(samples.shape[0], p.size)[step]
+            emu.set_port(p.name, value)
+        emu.eval()
+        emu.tick()
+        emu.eval()
+        for p in emu.fsm.out_signals:
+            out[p.name][step] = emu.get_port(p.name)
     return out
 
 
@@ -37,11 +58,18 @@ def _run_both(fsm: FSM, data: dict, prj_name: str, path, steps: int | None = Non
     """Compare the Verilated emulator against the cycle-accurate Python reference."""
     if steps is None:
         steps = min(len(np.asarray(data[p.name])) for p in fsm.inp_signals)
-    ref = _fsmemu_run(fsm, data, steps)
+    data = {k: np.asarray(v, dtype=np.float64) for k, v in data.items()}
+    ref_emu = FSMEmu(fsm)
+    ref_emu.soft_reset()
+    ref = _fsmemu_step_run(ref_emu, data, steps)
     emu = FSMProject(fsm, path, prj_name=prj_name)
     emu.compile(nproc=1)
     emu.soft_reset()
-    got = emu.run({k: np.asarray(v, dtype=np.float64) for k, v in data.items()}, steps=steps, scheduled=False)
+    got = emu.run(data, steps=steps, scheduled=False)
+    ref_step = _fsmemu_step_run(ref_emu, data, steps)
+    step_got = _rtl_step_run(emu, data, steps)
+    for name, expected in ref_step.items():
+        np.testing.assert_array_equal(step_got[name], expected)
     return ref, got
 
 
@@ -305,3 +333,47 @@ def test_systolic_2x2(temp_directory):
         np.testing.assert_array_equal(got[f'c{ij[0]}{ij[1]}'], ref[f'c{ij[0]}{ij[1]}'])
     c_emu = np.array([[got[f'c{i}{j}'][-1, 0] for j in range(2)] for i in range(2)])
     np.testing.assert_array_equal(c_emu, A @ B)
+
+
+# -------------------------------------------------------------
+
+
+def _pair_sum_scheduled_fsm():
+    """Accumulate pairs: output x[0]+x[1], x[2]+x[3], ... on every other cycle."""
+    add = _trace_comb([1, 1], [9, 8], [0, 0], lambda x: quantize(x[0] + x[1], 1, 9, 0))
+    sin_add, sout_add = _comb_io_signals('add', add)
+    toggle = _trace_comb([0], [1], [0], lambda x: quantize(x[0] + 1.0, 0, 1, 0))
+    sin_toggle, sout_toggle = _comb_io_signals('toggle', toggle)
+
+    inp = Signal('inp', True, ((1, 8, 0),), reg=False, schedule=ModuloSchedule((0,), 1), mode='r')
+    out = Signal('out', True, ((1, 9, 0),), reg=False, schedule=ModuloSchedule((0, 1), 2), mode='w')
+    acc = Signal('acc', False, ((1, 9, 0),), reg=True, mode='rw', rst_to=(0,))
+    phase = Signal('phase', False, ((0, 1, 0),), reg=True, mode='rw', rst_to=(0,))
+    conns = (
+        Conn(acc, sin_add[0:1]),
+        Conn(inp, sin_add[1:2]),
+        Conn(sout_add, acc, enable_if=phase, alt_src=inp),
+        Conn(phase, sin_toggle[0:1]),
+        Conn(sout_toggle, phase),
+        Conn(acc, out),
+    )
+    return FSM({'add': add, 'toggle': toggle}, conns)
+
+
+def test_scheduled_run_pair_sum(temp_directory):
+    _require_verilator()
+    fsm = _pair_sum_scheduled_fsm()
+    data = {'inp': np.array([2, -3, 4, 5, -6, 7], dtype=np.float64)}
+    expected = np.array([[-1], [9], [1]], dtype=np.float64)
+
+    ref = FSMEmu(fsm)
+    ref.soft_reset()
+    ref_out = ref.run(data, scheduled=True)
+    np.testing.assert_array_equal(ref_out['out'], expected)
+
+    emu = FSMProject(fsm, Path(temp_directory) / 'scheduled_pair_sum', prj_name='pair_sched_top')
+    emu.compile(nproc=1)
+    emu.soft_reset()
+    got = emu.run(data, scheduled=True)
+    np.testing.assert_array_equal(got['out'], ref_out['out'])
+    np.testing.assert_array_equal(got['out'], expected)
