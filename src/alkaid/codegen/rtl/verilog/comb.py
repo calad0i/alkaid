@@ -38,7 +38,7 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
     kifs = [op.qint.kif for op in ops]
     widths = list(map(sum, kifs))
     inp_widths = sol.inp_kifs.sum(axis=0)
-    _inp_widths = np.concat([[0], np.cumsum(inp_widths)])
+    _inp_widths = np.concatenate([[0], np.cumsum(inp_widths)])
     inp_idxs = np.stack([_inp_widths[1:] - 1, _inp_widths[:-1]], axis=1)
 
     lines: list[str] = []
