@@ -377,7 +377,7 @@ class FSMProject:
         self,
         data: Mapping[str, np.ndarray] | Sequence[np.ndarray] | Sequence[Mapping[str, np.ndarray]] | np.ndarray,
         steps: int | None = None,
-        scheduled: bool = True,
+        scheduled: bool | None = None,
         output_only: bool = True,
         extra_steps: int = 0,
     ) -> dict[str, np.ndarray]:
@@ -390,9 +390,13 @@ class FSMProject:
         for port in self.fsm.inp_signals:
             assert port.name in data, f'Missing input port {port.name} in data'
 
-        if scheduled:
-            for port in self.fsm.inp_signals + self.fsm.out_signals:
-                assert port.schedule is not None, f'Port {port.name} does not have a schedule'
+        is_scheduled = True
+        for port in self.fsm.inp_signals + self.fsm.out_signals:
+            is_scheduled &= port.schedule is not None
+        if scheduled is None:
+            scheduled = is_scheduled
+        if not is_scheduled and scheduled:
+            raise ValueError('Cannot run in scheduled mode when not all signals have schedules')
 
         data = {port.name: _as_port_matrix(port, data[port.name]) for port in self.fsm.inp_signals}
 
@@ -423,7 +427,7 @@ class FSMProject:
             results[port.name] = out
             output_data[j] = _ptr(out, P_F64)
 
-        self._lib.fsm_run(self._handle, input_data, input_n_samples, output_data, total_steps, 1 if scheduled else 0)
+        self._lib.fsm_run(self._handle, input_data, input_n_samples, output_data, total_steps, int(scheduled))
 
         return results
 
