@@ -29,7 +29,7 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 Language: Cpp
 NamespaceIndentation: All
 PenaltyExcessCharacter: 120
-PenaltyReturnTypeOnItsOwnLine: 1
+PenaltyReturnTypeOnItsOwnLine: 200
 PointerAlignment: Right
 SortIncludes: false
 SpaceBeforeParens: ControlStatements

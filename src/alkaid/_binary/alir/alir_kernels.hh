@@ -92,8 +92,7 @@ namespace alir {
             }
         }
 
-        inline int64_t
-        reduce_lane(int64_t v, int32_t shift, int64_t mask, int64_t sign_bit, bool out_signed) {
+        inline int64_t reduce_lane(int64_t v, int32_t shift, int64_t mask, int64_t sign_bit, bool out_signed) {
             v >>= shift;
             v &= mask;
             if (out_signed)
