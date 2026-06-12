@@ -74,11 +74,6 @@ template <size_t bw, size_t N_in> std::vector<int32_t> bitpack(const int64_t *va
 
 template <size_t bw, size_t N_out> std::vector<int64_t> bitunpack(const std::vector<int32_t> &packed) {
     static_assert(bw > 0 && bw <= 64, "Bit width must be between 1 and 64");
-
-    constexpr size_t total_bits = N_out * bw;
-    constexpr size_t packed_size = (total_bits + 31) / 32;
-    assert(packed.size() == packed_size);
-
     std::vector<int64_t> result(N_out, 0);
 
     for (size_t i = 0; i < N_out; i++) {

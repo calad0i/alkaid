@@ -17,7 +17,7 @@ VERILOG_SOURCES = $(wildcard ../src/static/*.v) $(wildcard ../src/*.v)
 	verilator --cc -j $(N_JOBS) -build --top-module $(TOP_MODULE) --prefix V$(VMOD_PREFIX) $(VERILATOR_FLAGS) $(VERILOG_SOURCES) -CFLAGS "$(CFLAGS)" -I../src -I../src/static
 
 $(LIBNAME): ./obj_dir/libV$(VMOD_PREFIX).a ./obj_dir/libverilated.a ./obj_dir/V$(VMOD_PREFIX)__ALL.a fsm_binder.cc fsm_config.hh fsm_wrapper.hh ioutil.hh
-	$(CXX) $(CFLAGS) $(LINKFLAGS) $(CXXFLAGS2) -pthread -shared -o $(LIBNAME) fsm_binder.cc ./obj_dir/libV$(VMOD_PREFIX).a ./obj_dir/libverilated.a ./obj_dir/V$(VMOD_PREFIX)__ALL.a
+	$(CXX) $(CFLAGS) $(LINKFLAGS) $(CXXFLAGS2) -pthread -shared -o $(LIBNAME) fsm_binder.cc ./obj_dir/libV$(VMOD_PREFIX).a ./obj_dir/libverilated.a ./obj_dir/V$(VMOD_PREFIX)__ALL.a $(EXTRA_CXXFLAGS)
 
 fast: CFLAGS += -O3
 fast: $(LIBNAME)

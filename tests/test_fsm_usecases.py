@@ -345,7 +345,7 @@ def _pair_sum_scheduled_fsm():
     toggle = _trace_comb([0], [1], [0], lambda x: quantize(x[0] + 1.0, 0, 1, 0))
     sin_toggle, sout_toggle = _comb_io_signals('toggle', toggle)
 
-    inp = Signal('inp', True, ((1, 8, 0),), reg=False, schedule=ModuloSchedule((0,), 1), mode='r')
+    inp = Signal('inp', True, ((1, 8, 0),), reg=False, schedule=ModuloSchedule((0,), 2), mode='r')
     out = Signal('out', True, ((1, 9, 0),), reg=False, schedule=ModuloSchedule((0, 1), 2), mode='w')
     acc = Signal('acc', False, ((1, 9, 0),), reg=True, mode='rw', rst_to=(0,))
     phase = Signal('phase', False, ((0, 1, 0),), reg=True, mode='rw', rst_to=(0,))

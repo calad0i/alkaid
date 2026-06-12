@@ -221,12 +221,20 @@ class FSMProject:
         with open(self._path / 'metadata.json', 'w') as f:
             json.dump(_metadata, f)
 
-    def _compile(self, verbose=False, nproc: int | None = None, o3: bool = False, clean: bool = True):
+    def _compile(
+        self,
+        verbose=False,
+        openmp: bool = True,
+        nproc: int | None = None,
+        o3: bool = False,
+        clean: bool = True,
+    ):
         self._uuid = str(uuid4())
         env = os.environ.copy()
         env['VM_PREFIX'] = self._prj_name
         env['TOP_MODULE'] = f'{self._prj_name}_wrapper'
         env['STAMP'] = self._uuid
+        env['EXTRA_CXXFLAGS'] = '-fopenmp' if openmp else ''
         env['VERILATOR_FLAGS'] = f'-Wall {verilator_warn_suppression()}'.strip()
         if nproc is not None:
             env['N_JOBS'] = str(nproc)
@@ -244,6 +252,7 @@ class FSMProject:
     def compile(
         self,
         verbose=False,
+        openmp: bool = True,
         nproc: int | None = None,
         o3: bool = False,
         clean: bool = True,
@@ -251,7 +260,7 @@ class FSMProject:
         no_shreg: bool = False,
     ):
         self.write(metadata=metadata, no_shreg=no_shreg)
-        self._compile(verbose=verbose, nproc=nproc, o3=o3, clean=clean)
+        self._compile(verbose=verbose, openmp=openmp, nproc=nproc, o3=o3, clean=clean)
 
     def _destroy(self):
         if not self._is_loaded():
@@ -274,7 +283,11 @@ class FSMProject:
             'fsm_get_signal': (None, [ctypes.c_void_p, ctypes.c_size_t, P_I64]),
             'fsm_set_signal_f64': (None, [ctypes.c_void_p, ctypes.c_size_t, P_F64]),
             'fsm_get_signal_f64': (None, [ctypes.c_void_p, ctypes.c_size_t, P_F64]),
-            'fsm_run': (None, [ctypes.c_void_p, PP_F64, P_SIZE, PP_F64, ctypes.c_size_t, ctypes.c_uint8]),
+            'fsm_run': (
+                None,
+                [ctypes.c_void_p, PP_F64, P_SIZE, PP_F64, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_uint8, ctypes.c_size_t],
+            ),
+            'openmp_enabled': (ctypes.c_bool, []),
         }
         for name, (restype, argtypes) in specs.items():
             fn = getattr(self._lib, name)
@@ -380,6 +393,7 @@ class FSMProject:
         scheduled: bool | None = None,
         output_only: bool = True,
         extra_steps: int = 0,
+        n_thread: int = 1,
     ) -> dict[str, np.ndarray]:
         self._assert_loaded()
         assert output_only, 'Internal tracing is not supported; expose debug signals as output ports'
@@ -427,23 +441,30 @@ class FSMProject:
             results[port.name] = out
             output_data[j] = _ptr(out, P_F64)
 
-        self._lib.fsm_run(self._handle, input_data, input_n_samples, output_data, total_steps, int(scheduled))
+        with at_path(self._path / 'src/memfiles'):
+            self._lib.fsm_run(
+                self._handle, input_data, input_n_samples, output_data, steps, extra_steps, int(scheduled), n_thread
+            )
 
         return results
 
     def predict(
         self,
         data: Mapping[str, np.ndarray] | Sequence[np.ndarray] | Sequence[Mapping[str, np.ndarray]] | np.ndarray,
-    ) -> dict[str, np.ndarray]:
+        n_thread: int = -1,
+        always_return_dict: bool = False,
+    ) -> dict[str, np.ndarray] | np.ndarray:
         _period = set()
         for port in self.fsm.inp_signals + self.fsm.out_signals:
             assert port.schedule is not None, f'Port {port.name} does not have a schedule'
             _period.add(port.schedule.period)
         assert len(_period) == 1, 'All signals must have the same schedule period'
         extra_steps = max(port.schedule.bias for port in self.fsm.out_signals)  # type: ignore
-
         self.soft_reset()
-        return self.run(data, extra_steps=max(extra_steps - 1, 0), scheduled=True, output_only=True)
+        ret = self.run(data, extra_steps=max(extra_steps - 1, 0), scheduled=True, output_only=True, n_thread=n_thread)
+        if not always_return_dict and len(ret) == 1:
+            return next(iter(ret.values()))
+        return ret
 
     def __del__(self):
         self._destroy()

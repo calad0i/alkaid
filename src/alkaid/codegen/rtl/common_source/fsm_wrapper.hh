@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <memory>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 struct fsm_schedule_config_t {
@@ -51,6 +50,29 @@ inline bool fsm_schedule_check(const fsm_schedule_config_t &schedule, size_t t) 
     assert(schedule.period > 0);
     return schedule.valid_mask[(t - schedule.bias) % schedule.period] != 0;
 }
+
+// Number of valid cycles in [0, t_end) for a schedule.
+inline size_t fsm_valid_count(const fsm_schedule_config_t &schedule, size_t n_period) {
+    if (!schedule.enabled) {
+        return n_period * schedule.period;
+    }
+    size_t per_period = 0;
+    for (size_t i = 0; i < schedule.period; ++i) {
+        per_period += schedule.valid_mask[i] != 0;
+    }
+    return per_period * n_period;
+}
+
+template <typename config_t> inline size_t get_period() {
+    static_assert(
+        config_t::n_inputs + config_t::n_outputs > 0,
+        "At least one signal is required to determine the period."
+    );
+    auto schedule = config_t::signal_schedules[0];
+    return schedule.period;
+}
+
+// inline size_t get_period(const
 
 template <typename T, typename = void> struct fsm_has_clk : std::false_type {};
 template <typename T>
@@ -159,14 +181,26 @@ template <typename config_t> class FSMWrapper {
         config_get_float_signal<config_t>(dut_.get(), signal_id, values);
     }
 
-    void
-    run(const double *const *input_data,
+    void run(
+        const double *const *input_data,
         const size_t *input_n_samples,
         double *const *output_data,
         size_t steps,
-        bool scheduled) {
+        bool scheduled,
+        size_t _period_start = 0 // _period_start > 0 implies launching worker in parallel exec
+    ) {
         std::vector<size_t> input_counts(config_t::n_inputs, 0);
         std::vector<size_t> output_counts(config_t::n_outputs, 0);
+
+        if (_period_start > 0) {
+            for (size_t i = 0; i < config_t::n_inputs; ++i) {
+                input_counts[i] = fsm_valid_count(config_t::signal_schedules[i], _period_start);
+            }
+            for (size_t j = 0; j < config_t::n_outputs; ++j) {
+                output_counts[j] =
+                    fsm_valid_count(config_t::signal_schedules[config_t::n_inputs + j], _period_start);
+            }
+        }
 
         for (size_t step = 0; step < steps; ++step) {
             const size_t t = t_;
