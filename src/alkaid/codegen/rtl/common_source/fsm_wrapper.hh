@@ -41,13 +41,12 @@ void fsm_get_float(const field_t &field, double *values) {
 }
 
 inline bool fsm_schedule_check(const fsm_schedule_config_t &schedule, size_t t) {
-    if (!schedule.enabled) {
+    if (!schedule.enabled || schedule.period == 0) {
         return true;
     }
     if (t < schedule.bias) {
         return false;
     }
-    assert(schedule.period > 0);
     return schedule.valid_mask[(t - schedule.bias) % schedule.period] != 0;
 }
 
@@ -55,6 +54,9 @@ inline bool fsm_schedule_check(const fsm_schedule_config_t &schedule, size_t t) 
 inline size_t fsm_valid_count(const fsm_schedule_config_t &schedule, size_t n_period) {
     if (!schedule.enabled) {
         return n_period * schedule.period;
+    }
+    if (schedule.period == 0) {
+        return n_period;
     }
     size_t per_period = 0;
     for (size_t i = 0; i < schedule.period; ++i) {

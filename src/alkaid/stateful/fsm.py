@@ -27,14 +27,20 @@ class ModuloSchedule:
     bias: int = field(init=False)
 
     def __post_init__(self):
-        assert self.period > 0, 'Period must be positive'
+        assert self.period >= 0, 'Period must be non-negative'
         toggle = self.toggle
+        if self.period == 0:
+            self.bias = 0
+            self.toggle = (0,)
+            return
         assert max(toggle) - min(toggle) < self.period, f'Toggle values ({toggle}) must be within one period ({self.period})'
         self.bias = min(toggle)
         self.toggle = tuple((t - self.bias) for t in toggle)
 
     @cached_property
     def valid_mask(self) -> tuple[bool, ...]:
+        if self.period == 0:
+            return (True,)
         valid = np.searchsorted(self.toggle, np.arange(self.period), side='right') % 2 == 1
         return valid.tolist()
 
@@ -52,10 +58,14 @@ class ModuloSchedule:
         return [tuple(t + self.bias for t in self.toggle), self.period]
 
     def check(self, t: int) -> bool:
+        if self.period == 0:
+            return True
         return t >= self.bias and self.valid_mask[(t - self.bias) % self.period]
 
     def t_to_dense_idx(self, t: int) -> int:
         "t-th valid step to dense idx"
+        if self.period == 0:
+            return t
         t = t - self.bias
         return self.cum_valid_mask[t % self.period] + (t // self.period) * self.cum_valid_mask[-1] - 1
 
@@ -68,6 +78,8 @@ class ModuloSchedule:
 
     def dense_idx_to_t(self, idx: int) -> int:
         "idx-th valid step to t"
+        if self.period == 0:
+            return idx
         period_count = idx // self.cum_valid_mask[-1]
         idx_in_period = self.cum_valid_mask.index((idx % self.cum_valid_mask[-1]) + 1)
         return period_count * self.period + idx_in_period + self.bias
@@ -652,4 +664,4 @@ class FSMEmu:
         extra_steps = max(port.schedule.bias for port in self.fsm.out_signals)  # type: ignore
 
         self.soft_reset()
-        return self.run(data, extra_steps=extra_steps - 1, scheduled=True, output_only=True)
+        return self.run(data, extra_steps=max(extra_steps - 1, 0), scheduled=True, output_only=True)

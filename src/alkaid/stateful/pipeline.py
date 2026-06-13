@@ -8,6 +8,7 @@ def pipeline_to_fsm(pipe: Pipeline, reg_inp=True, reg_out=True) -> FSM:
 
     inp_precisions = tuple(qint.kif for qint in pipe.inp_qint)
     out_precisions = tuple(qint.kif for qint in pipe.out_qint)
+    io_period = 0 if lat == 1 and not reg_inp and not reg_out else 1
 
     conns: list[Conn] = []
     inp_sig = Signal(
@@ -16,7 +17,7 @@ def pipeline_to_fsm(pipe: Pipeline, reg_inp=True, reg_out=True) -> FSM:
         inp_precisions,
         reg=False,
         mode='r',
-        schedule=ModuloSchedule((0,), 1),
+        schedule=ModuloSchedule((0,), io_period),
     )
     out_sig = Signal(
         'model_out',
@@ -24,7 +25,7 @@ def pipeline_to_fsm(pipe: Pipeline, reg_inp=True, reg_out=True) -> FSM:
         out_precisions,
         reg=reg_out,
         mode='w',
-        schedule=ModuloSchedule((lat - 1 + reg_out + reg_inp,), 1),
+        schedule=ModuloSchedule((lat - 1 + reg_out + reg_inp,), io_period),
     )
 
     if reg_inp:

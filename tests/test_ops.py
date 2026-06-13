@@ -98,6 +98,14 @@ class OperationTest:
         comb_pred = comb.predict(test_data[:1000])
         np.testing.assert_equal(fsm_pred, comb_pred)
 
+    def test_comb_only_fsm_pred(self, comb: CombLogic, test_data: np.ndarray):
+        pipe = to_pipeline(comb, n_stages=1)
+        fsm = pipeline_to_fsm(pipe, reg_inp=False, reg_out=False)
+
+        fsm_pred = fsm.predict(test_data[:1000])['model_out']
+        comb_pred = comb.predict(test_data[:1000])
+        np.testing.assert_equal(fsm_pred, comb_pred)
+
     @pytest.mark.parametrize('n_stages', [3])
     def test_fsm_serialization(self, comb: CombLogic, temp_directory: str, n_stages: int):
         pipe = to_pipeline(comb, n_stages=n_stages)
