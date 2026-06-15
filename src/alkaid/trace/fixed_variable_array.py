@@ -99,8 +99,8 @@ def cmvm(cm: np.ndarray, v: 'FVArray', solver_options: solver_options_t) -> np.n
     _mat = np.ascontiguousarray(cm.astype(np.float32))
     solver_options = solver_options.copy()
     solver_options.pop('offload_fn', None)
-    sol = cmvm_solve(_mat, qintervals=qintervals, latencies=latencies, **solver_options)  # type: ignore
-    _r: np.ndarray = sol(v_raw)
+    c0, c1 = cmvm_solve(_mat, qintervals=qintervals, latencies=latencies, **solver_options)  # type: ignore
+    _r: np.ndarray = c1(c0(v_raw, quantize=False), quantize=False)
     if offload_cm is not None:
         _r = _r + mmm(v_raw, offload_cm)
     return _r

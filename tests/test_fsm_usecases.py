@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from alkaid.codegen.rtl.fsm_model import FSMProject
+from alkaid.codegen import RTLModel
 from alkaid.stateful import FSM, Conn, ModuloSchedule, Signal
 from alkaid.stateful.fsm import FSMEmu, _comb_io_signals
 from alkaid.trace import FVArray, trace
@@ -50,7 +50,7 @@ def _fsmemu_run(fsm: FSM, data: dict, steps: int) -> dict[str, np.ndarray]:
     return _fsmemu_step_run(emu, data, steps)
 
 
-def _rtl_step_run(emu: FSMProject, data: dict, steps: int) -> dict[str, np.ndarray]:
+def _rtl_step_run(emu: RTLModel, data: dict, steps: int) -> dict[str, np.ndarray]:
     """Exercise the RTL binder's scalar step API from the DUT's current state."""
     data = {k: np.asarray(v, dtype=np.float64) for k, v in data.items()}
     out = {p.name: np.empty((steps, p.size), dtype=np.float64) for p in emu.fsm.out_signals}
@@ -76,7 +76,7 @@ def _run_both(fsm: FSM, data: dict, prj_name: str, path, flavor: str, steps: int
     ref_emu = FSMEmu(fsm)
     ref_emu.soft_reset()
     ref = _fsmemu_step_run(ref_emu, data, steps)
-    emu = FSMProject(fsm, path, prj_name=prj_name, flavor=flavor)
+    emu = RTLModel(fsm, path, prj_name=prj_name, flavor=flavor)
     emu.compile(nproc=1)
     emu.soft_reset()
     got = emu.run(data, steps=steps, scheduled=False)
@@ -385,7 +385,7 @@ def test_scheduled_run_pair_sum(temp_directory, rtl_flavor):
     np.testing.assert_array_equal(ref_out['y'], expected)
 
     path = Path(temp_directory) / rtl_flavor / 'scheduled_pair_sum'
-    emu = FSMProject(
+    emu = RTLModel(
         fsm,
         path,
         prj_name='pair_sched_top',

@@ -16,14 +16,6 @@
 namespace nb = nanobind;
 using namespace nb::literals;
 
-// Stub type so nanobind generates "alkaid.types.Pipeline" in the .pyi return type
-struct PyPipeline {};
-namespace nanobind::detail {
-    template <> struct type_caster<PyPipeline> {
-        NB_TYPE_CASTER(PyPipeline, const_name("alkaid.types.Pipeline"))
-    };
-} // namespace nanobind::detail
-
 struct PyCombLogic {};
 namespace nanobind::detail {
     template <> struct type_caster<PyCombLogic> {
@@ -163,16 +155,13 @@ static nb::object make_py_comblogic(const CombLogicResult &sol) {
     );
 }
 
-// Convert C++ PipelineResult -> Python Pipeline NamedTuple
-static nb::object make_py_pipeline(const PipelineResult &result) {
-    auto types = nb::module_::import_("alkaid.types");
-    auto Pipeline_cls = types.attr("Pipeline");
-
+// Convert C++ PipelineResult -> tuple[CombLogic, ...].
+static nb::tuple make_py_stage_tuple(const PipelineResult &result) {
     nb::list solutions;
     for (auto &sol : result.solutions) {
         solutions.append(make_py_comblogic(sol));
     }
-    return Pipeline_cls(nb::tuple(solutions));
+    return nb::tuple(solutions);
 }
 
 // Extract QIntervals from Python list of tuples/QInterval
@@ -205,8 +194,7 @@ static std::vector<float> extract_latencies(nb::object obj) {
 
 using vec_of_qints = nb::typed<nb::sequence, nb::typed<nb::tuple, float, float, float>>;
 
-// Python-facing solve function
-static nb::typed<nb::object, PyPipeline> cmvm_numpy(
+static nb::typed<nb::tuple, PyCombLogic, PyCombLogic> cmvm_numpy(
     const nb::ndarray<float> &kernel_arr,
     const std::string &method0,
     const std::string &method1,
@@ -240,7 +228,7 @@ static nb::typed<nb::object, PyPipeline> cmvm_numpy(
         partial
     );
 
-    return make_py_pipeline(result);
+    return make_py_stage_tuple(result);
 }
 
 nb::typed<nb::tuple, int8_t, int8_t, int8_t> overlap_counts_(

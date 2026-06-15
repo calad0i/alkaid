@@ -7,7 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 from xls.raw import jit_fn_predict
 
-from ...types import CombLogic, Pipeline
+from ...types import CombLogic
 from .xls_codegen import build_xls_function, build_xls_io_wrapper
 
 
@@ -16,7 +16,7 @@ class XLSModel:
 
     def __init__(
         self,
-        logic: CombLogic | Pipeline,
+        logic: CombLogic,
         prj_name: str | None = None,
     ):
         self._solution = logic
@@ -26,8 +26,6 @@ class XLSModel:
 
     def _build(self):
         """Build the XLS IR function from the solution."""
-        if isinstance(self._solution, Pipeline):
-            raise NotImplementedError('Pipeline XLS codegen not yet supported')
         self._pkg, self._fn = build_xls_function(self._solution, self._prj_name)
         self._pkg.set_top(self._prj_name)
         wrapper_name = f'{self._prj_name}_wrapper'

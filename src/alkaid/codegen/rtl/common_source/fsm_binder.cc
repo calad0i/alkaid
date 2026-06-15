@@ -1,6 +1,7 @@
 #include "fsm_config.hh"
 #include "fsm_wrapper.hh"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -58,6 +59,11 @@ extern "C"
         uint8_t scheduled,
         size_t n_thread
     ) {
+        size_t period = scheduled ? get_period<fsm_config_t>() : 1;
+        if (scheduled && period == 0 && extra_steps != 0) {
+            std::cerr << "Error: extra_steps is invalid for period-0 combinational FSMs" << std::endl;
+            return;
+        }
         if (n_thread == 1 || !openmp_enabled() || !scheduled) {
             static_cast<wrapper_t *>(handle)->run(
                 input_data, input_n_samples, output_data, steps + extra_steps, scheduled != 0, 0
@@ -65,19 +71,19 @@ extern "C"
         }
 #ifdef _OPENMP
         else {
-            size_t period = get_period<fsm_config_t>();
-            if (period == 0) {
+            size_t exec_period = period == 0 ? 1 : period;
+            if (steps % exec_period != 0) {
+                std::cerr << "Error: steps must be a multiple of " << exec_period << " when n_thread > 1"
+                          << std::endl;
+                return;
+            }
+            size_t n_periods = steps / exec_period;
+            if (n_periods == 0) {
                 static_cast<wrapper_t *>(handle)->run(
                     input_data, input_n_samples, output_data, steps + extra_steps, scheduled != 0, 0
                 );
                 return;
             }
-            if (steps % period != 0) {
-                std::cerr << "Error: steps must be a multiple of " << period << " when n_thread > 1"
-                          << std::endl;
-                return;
-            }
-            size_t n_periods = steps / period;
             if (n_thread == 0) {
                 n_thread = omp_get_max_threads();
             }
@@ -90,7 +96,10 @@ extern "C"
                 wrapper_t _dut;
                 _dut.soft_reset();
                 size_t start_period = i * n_periods_per_thread;
-                size_t steps = std::min(n_periods_per_thread, n_periods - start_period) * period;
+                if (start_period >= n_periods) {
+                    continue;
+                }
+                size_t steps = std::min(n_periods_per_thread, n_periods - start_period) * exec_period;
                 _dut.run(input_data, input_n_samples, output_data, steps + extra_steps, true, start_period);
             }
         }

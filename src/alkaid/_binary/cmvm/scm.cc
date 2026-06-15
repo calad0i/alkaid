@@ -345,8 +345,13 @@ namespace {
         std::vector<Occurrence> occs;
     };
 
-    inline void
-    push_regular_occurrence(std::vector<Occurrence> &out, int src_var, int anchor, int gap_i, int8_t rep_sign) {
+    inline void push_regular_occurrence(
+        std::vector<Occurrence> &out,
+        int src_var,
+        int anchor,
+        int gap_i,
+        int8_t rep_sign
+    ) {
         Occurrence o{};
         o.kind = 0;
         o.anchor = anchor;

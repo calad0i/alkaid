@@ -3,7 +3,7 @@ import json
 import os
 import struct
 from collections.abc import Sequence
-from functools import reduce, singledispatch
+from functools import singledispatch
 from math import floor
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, TypeVar
@@ -617,84 +617,3 @@ class CombLogic(NamedTuple):
             n_threads = int(os.environ.get('DA_DEFAULT_THREADS', 0))
         bin_logic = self.to_bytecode()
         return alir_interp_run(bin_logic, data, n_threads, dump=dump, ignore_lookup_oob=ignore_lookup_oob)
-
-
-class Pipeline(NamedTuple):
-    """Initiation-interval-one pipeline represented as cascaded `CombLogic` stages."""
-
-    solutions: tuple[CombLogic, ...]
-
-    def __call__(self, inp: list | np.ndarray | tuple, quantize=False, debug=False):
-        out = np.asarray(inp)
-        for sol in self.solutions:
-            out = sol(out, quantize=quantize, debug=debug)
-        return out
-
-    @property
-    def kernel(self):
-        return reduce(lambda x, y: x @ y, [sol.kernel for sol in self.solutions])
-
-    @property
-    def cost(self):
-        return sum(sol.cost for sol in self.solutions)
-
-    @property
-    def latency(self):
-        return self.solutions[-1].latency
-
-    @property
-    def inp_qint(self):
-        return self.solutions[0].inp_qint
-
-    @property
-    def inp_kifs(self):
-        return self.solutions[0].inp_kifs
-
-    @property
-    def inp_latency(self):
-        return self.solutions[0].inp_latency
-
-    @property
-    def out_qint(self):
-        return self.solutions[-1].out_qint
-
-    @property
-    def out_kifs(self):
-        return self.solutions[-1].out_kifs
-
-    @property
-    def out_latency(self):
-        return self.solutions[-1].out_latency
-
-    @property
-    def shape(self):
-        return self.solutions[0].shape[0], self.solutions[-1].shape[1]
-
-    @property
-    def inp_shifts(self):
-        return self.solutions[0].inp_shifts
-
-    @property
-    def out_shifts(self):
-        return self.solutions[-1].out_shifts
-
-    @property
-    def out_negs(self):
-        return self.solutions[-1].out_negs
-
-    def __repr__(self) -> str:
-        n_ins = [sol.shape[0] for sol in self.solutions] + [self.shape[1]]
-        shape_str = ' -> '.join(map(str, n_ins))
-        _cost = self.cost
-        lat_min, lat_max = self.latency
-        return f'CascatedSolution([{shape_str}], cost={_cost}, latency={lat_min}-{lat_max})'
-
-    @property
-    def reg_bits(self):
-        """The number of bits used for the register in the solution."""
-        bits = sum(map(sum, (qint.kif for qint in self.inp_qint)))
-        for _sol in self.solutions:
-            kifs = [qint.kif for qint in _sol.out_qint]
-            _bits = sum(map(sum, kifs))
-            bits += _bits
-        return bits

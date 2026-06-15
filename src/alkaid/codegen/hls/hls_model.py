@@ -18,7 +18,7 @@ from alkaid.types import CombLogic
 
 from ...trace.passes import dead_code_elimin, fuse_ternary_adders
 from .. import hls
-from ..rtl.rtl_model import canon_name
+from ..rtl._utils import canon_name
 
 T = TypeVar('T', bound=np.floating)
 

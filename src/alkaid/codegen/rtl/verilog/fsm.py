@@ -114,12 +114,12 @@ def _padded_prec(prec: Sequence[Precision]) -> Precision:
     return Precision(bool(kif[0]), int(kif[1]), int(kif[2]))
 
 
-def _to_def_str(sig: Signal, pad=False) -> str:
+def _to_def_str(sig: Signal, pad=False, force_wire: bool = False) -> str:
     if not pad:
         width = sig.width
     else:
         width = sig.size * sum(_padded_prec(sig.precisions))
-    if sig.reg:
+    if sig.reg and not force_wire:
         _type = 'reg' if not sig.attrs else f'{sig.attrs} reg'
     else:
         _type = 'wire' if not sig.attrs else f'{sig.attrs} wire'
@@ -135,7 +135,7 @@ def to_header(fsm: FSM, name: str, pad: bool):
     if need_clk:
         inputs = ['input clk'] + inputs
 
-    outputs = [f'output {_to_def_str(sig, pad)}' for sig in fsm.out_signals]
+    outputs = [f'output {_to_def_str(sig, pad, force_wire=pad)}' for sig in fsm.out_signals]
 
     io_defs = ',\n    '.join(inputs + outputs)
     module_header = f'module {name} (\n    {io_defs}\n);'

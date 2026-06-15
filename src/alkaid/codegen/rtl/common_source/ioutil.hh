@@ -4,9 +4,8 @@
 #include <cstdint>
 #include <vector>
 
-// --- Fixed-point <-> double scalar casts (shared by the comb/pipeline binder and the
-// FSM binder).  Precision is passed as template parameters so the scale factor folds to
-// a compile-time constant and the SIMD batch loops in binder_util.hh stay vectorizable.
+// --- Fixed-point <-> double scalar casts used by the FSM binder. Precision is passed
+// as template parameters so the scale factor folds to a compile-time constant.
 inline int64_t _sign_ext(uint64_t v, int bw) {
     uint64_t sign_bit = uint64_t(1) << (bw - 1);
     uint64_t ext_mask = ~((uint64_t(1) << bw) - 1);

@@ -6,7 +6,6 @@ import pytest
 
 from alkaid._binary import alir_interp_run_json_file
 from alkaid.codegen import HLSModel, RTLModel
-from alkaid.stateful import pipeline_to_fsm
 from alkaid.trace import FVArray, to_pipeline, trace
 from alkaid.trace.ops import quantize, relu
 from alkaid.trace.passes import dead_code_elimin, fuse_ternary_adders, optimize
@@ -92,15 +91,13 @@ class OperationTest:
     @pytest.mark.parametrize('reg_out', [True, False])
     def test_fsm_pred(self, comb: CombLogic, test_data: np.ndarray, n_stages: int, reg_inp: bool, reg_out: bool):
 
-        pipe = to_pipeline(comb, n_stages=n_stages)
-        fsm = pipeline_to_fsm(pipe, reg_inp=reg_inp, reg_out=reg_out)
+        fsm = to_pipeline(comb, n_stages=n_stages, reg_inp=reg_inp, reg_out=reg_out)
         fsm_pred = fsm.predict(test_data[:1000])['model_out']
         comb_pred = comb.predict(test_data[:1000])
         np.testing.assert_equal(fsm_pred, comb_pred)
 
     def test_comb_only_fsm_pred(self, comb: CombLogic, test_data: np.ndarray):
-        pipe = to_pipeline(comb, n_stages=1)
-        fsm = pipeline_to_fsm(pipe, reg_inp=False, reg_out=False)
+        fsm = to_pipeline(comb, n_stages=1, reg_inp=False, reg_out=False)
 
         fsm_pred = fsm.predict(test_data[:1000])['model_out']
         comb_pred = comb.predict(test_data[:1000])
@@ -108,8 +105,7 @@ class OperationTest:
 
     @pytest.mark.parametrize('n_stages', [3])
     def test_fsm_serialization(self, comb: CombLogic, temp_directory: str, n_stages: int):
-        pipe = to_pipeline(comb, n_stages=n_stages)
-        fsm = pipeline_to_fsm(pipe)
+        fsm = to_pipeline(comb, n_stages=n_stages)
         fsm.save(f'{temp_directory}/fsm.json.gz')
         fsm.save(f'{temp_directory}/fsm.json')
         fsm2 = type(fsm).load(f'{temp_directory}/fsm.json.gz')

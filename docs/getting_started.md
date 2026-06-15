@@ -102,7 +102,7 @@ rtl_model.compile()      # compile simulation emulator (requires Verilator or GH
 y = rtl_model.predict(x) # bit-accurate inference via compiled emulator
 ```
 
-The generated project includes TCL build scripts for Vivado (`build_vivado_prj.tcl`) and Quartus (`build_quartus_prj.tcl`). Both `CombLogic` and `Pipeline` are supported.
+The generated project includes TCL build scripts for Vivado (`build_vivado_prj.tcl`) and Quartus (`build_quartus_prj.tcl`). `CombLogic` inputs are lowered to an FSM; pass `n_stages` or `latency_cutoff` to generate a registered staged FSM.
 
 ### HLS (Vitis / HLSlib / oneAPI)
 
@@ -118,7 +118,7 @@ hls_model.compile()      # compile C++ emulator
 y = hls_model.predict(x) # inference via compiled emulator
 ```
 
-Note: only `CombLogic` is supported for HLS backends; `Pipeline` is not.
+Note: only `CombLogic` is supported for HLS backends.
 
 
 ## XLS backend (experimental):

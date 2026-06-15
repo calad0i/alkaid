@@ -101,8 +101,6 @@ class Signal:
         _dynamic_bias: 'tuple[Signal, int] | None' = None,
     ):
         assert mode in ('', 'r', 'w', 'rw'), 'Mode must be one of "", "r", "w", "rw"'
-        if mode in ('r', 'w') and not exposed:
-            assert rst_to is not None
         self._rst_to: tuple[float, ...] | None = None
         if mode == 'r' and exposed:
             assert not reg, 'Input signal cannot be register. Capture to internal reg if needed'
@@ -232,6 +230,14 @@ class Signal:
     def __repr__(self):
         return f'Signal({self.name}[{self.view[0]}:{self.view[1]}])'
 
+    def read(self):
+        if 'r' not in self.mode:
+            self.mode = 'r' + self.mode
+
+    def write(self):
+        if 'w' not in self.mode:
+            self.mode = self.mode + 'w'
+
 
 @dataclass
 class Conn:
@@ -277,8 +283,8 @@ class Conn:
 def _comb_io_signals(name: str, comb: CombLogic) -> tuple[Signal, Signal]:
     prec_in = tuple(qint.kif for qint in comb.inp_qint)
     prec_out = tuple(qint.kif for qint in comb.out_qint)
-    sig_in = Signal(f'INTERNAL_{name}_inp', False, prec_in, reg=False)
-    sig_out = Signal(f'INTERNAL_{name}_outp', False, prec_out, reg=False)
+    sig_in = Signal(f'INTERNAL_{name}_inp', False, prec_in, reg=False, mode='r')
+    sig_out = Signal(f'INTERNAL_{name}_outp', False, prec_out, reg=False, mode='w')
     return sig_in, sig_out
 
 
@@ -364,10 +370,17 @@ class FSM:
         conns: tuple[Conn, ...],
         _sorted=False,
     ):
-        self.logic = dict(logic)
-        conns = tuple(conns)
         if not _sorted:
-            logic, conns = _remove_const_logic(self.logic, conns)
+            logic, conns = _remove_const_logic(logic, conns)
+        self.logic = logic
+
+        for conn in conns:
+            conn.src.read()
+            conn.dst.write()
+            if conn.enable_if is not None:
+                conn.enable_if.read()
+            if conn.alt_src is not None:
+                conn.alt_src.read()
 
         comb_conns = tuple(conn for conn in conns if not conn.clocked)
         self.reg_conns = tuple(conn for conn in conns if conn.clocked)
@@ -404,6 +417,11 @@ class FSM:
             seen_refs.add(id(sig))
             if sig.name not in signals:
                 signals[sig.name] = sig.raw
+            else:
+                if 'r' in sig.mode:
+                    signals[sig.name].read()
+                if 'w' in sig.mode:
+                    signals[sig.name].write()
             if sig.rst_if is not None:
                 _add_signal(sig.rst_if)
             if sig._dynamic_bias is not None:
@@ -415,10 +433,14 @@ class FSM:
                 if sig is not None:
                     _add_signal(sig)
 
-        for name, comb in self.logic.items():
-            sig_in, sig_out = _comb_io_signals(name, comb)
-            signals[sig_in.name] = sig_in
-            signals[sig_out.name] = sig_out
+        # for name, comb in self.logic.items():
+        #     sig_in, sig_out = _comb_io_signals(name, comb)
+        #     if sig_in.name not in signals:
+        #         signals[sig_in.name] = sig_in
+        #     if sig_out.name not in signals:
+        #         signals[sig_out.name] = sig_out
+        # assert sig_in.name in signals, f'Comb logic {name} input signal {sig_in.name} not found in connections'
+        # assert sig_out.name in signals, f'Comb logic {name} output signal {sig_out.name} not found in connections'
 
         self.signals = signals
 
@@ -476,6 +498,17 @@ class FSM:
         if not self._has_emu:
             self._emu = FSMEmu(self)
             self._has_emu = True
+
+    def run(
+        self,
+        data: Mapping[str, np.ndarray] | Sequence[np.ndarray] | Sequence[Mapping[str, np.ndarray]] | np.ndarray,
+        steps: int | None = None,
+        scheduled: bool | None = None,
+        output_only: bool = True,
+        extra_steps: int = 0,
+    ) -> dict[str, np.ndarray]:
+        self._init_emu()
+        return self._emu.run(data, steps=steps, scheduled=scheduled, output_only=output_only, extra_steps=extra_steps)
 
     def predict(
         self, data: Mapping[str, np.ndarray] | Sequence[np.ndarray] | Sequence[Mapping[str, np.ndarray]] | np.ndarray
@@ -591,7 +624,7 @@ class FSMEmu:
         self,
         data: Mapping[str, np.ndarray] | Sequence[np.ndarray] | Sequence[Mapping[str, np.ndarray]] | np.ndarray,
         steps: int | None = None,
-        scheduled: bool = True,
+        scheduled: bool | None = None,
         output_only: bool = True,
         extra_steps: int = 0,
     ) -> dict[str, np.ndarray]:
@@ -602,9 +635,10 @@ class FSMEmu:
         for port in self.fsm.inp_signals:
             assert port.name in data, f'Missing input port {port.name} in data'
 
+        all_scheduled = all(port.schedule is not None for port in self.fsm.inp_signals + self.fsm.out_signals)
+        scheduled = scheduled if scheduled is not None else all_scheduled
         if scheduled:
-            for port in self.fsm.inp_signals + self.fsm.out_signals:
-                assert port.schedule is not None, f'Port {port.name} does not have a schedule'
+            assert all_scheduled, 'Scheduled run requires all input and output signals to have schedules'
 
         if not steps:
             if scheduled:
@@ -644,7 +678,7 @@ class FSMEmu:
                         continue
                     idx = port.schedule.n_valid_samples_between(t0, self._t) - 1  # type: ignore
                 else:
-                    idx = self._t - t0
+                    idx = self._t - t0 - 1
                 results[port.name][idx] = self.buffers[port.name]
             if not output_only:
                 for port in self.fsm.internal_signals:
