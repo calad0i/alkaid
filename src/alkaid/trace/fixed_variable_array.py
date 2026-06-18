@@ -18,6 +18,7 @@ T = TypeVar('T')
 _ARRAY_FN: dict = {}
 _UFUNC_REDUCE: dict = {}
 _UFUNC: dict = {}
+_torch_dispatch = None
 
 
 def _array_fn(*funcs):
@@ -27,6 +28,11 @@ def _array_fn(*funcs):
         return fn
 
     return deco
+
+
+def _register_torch_dispatch(handler):
+    global _torch_dispatch
+    _torch_dispatch = handler
 
 
 def _ufunc(*ufuncs):
@@ -185,6 +191,14 @@ class FVArray(np.ndarray):
             assert len(inputs) == 1 and inputs[0] is self
             return self.apply(ufunc)
         raise NotImplementedError(f'Unsupported ufunc: {ufunc}')
+
+    @classmethod
+    def __torch_function__(cls, func, types, args=(), kwargs=None):
+        if _torch_dispatch is not None:
+            result = _torch_dispatch(func, args, kwargs or {})
+            if result is not NotImplemented:
+                return result
+        return NotImplemented
 
     @classmethod
     def from_lhs(
