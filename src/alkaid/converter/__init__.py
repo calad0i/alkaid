@@ -18,6 +18,15 @@ def get_available_plugins() -> dict[str, EntryPoint]:
     return plugin_repo
 
 
+@cache
+def load_plugin(framework: str) -> None:
+    """Activate a converter plugin for use with the functional tracing API."""
+    plugins = get_available_plugins()
+    if framework not in plugins: 
+        raise ValueError(f'No plugin found for framework {framework!r}. Available: {list(plugins.keys())}')
+    plugins[framework].load()
+
+
 @overload
 def trace_model(  # type: ignore
     model: Any,
