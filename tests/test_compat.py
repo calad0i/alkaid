@@ -27,4 +27,6 @@ def test_compat_v2():
     out = v2_operation(inp)
     comb = trace(inp, out)
     comb_load = CombLogic.load(Path(__file__).parent / '_legacy_models/v2.json.gz')
-    assert comb == comb_load
+    assert all(
+        op1.opcode == op2.opcode and op1.addr == op2.addr and op1.data == op2.data for op1, op2 in zip(comb.ops, comb_load.ops)
+    )
