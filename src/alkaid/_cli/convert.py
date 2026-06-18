@@ -38,7 +38,7 @@ def to_alkaid(
     if flavor == 'auto':
         if path.suffix == '.json':
             flavor = 'json'
-        elif path.suffixes == ['.json', '.gz']:
+        elif path.suffixes[-2:] == ['.json', '.gz']:
             flavor = 'json.gz'
         else:
             flavor = 'verilog'
