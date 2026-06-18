@@ -11,7 +11,7 @@ from uuid import UUID
 import numpy as np
 from numpy.typing import NDArray
 
-from .._binary.cmvm_bin import get_lsb_loc, get_lsb_loc_arr, scm_solve
+from .._binary.cmvm_bin import get_lsb_loc, get_lsb_loc_arr, iceil_log2, scm_solve
 from ..types import QInterval
 from .affine_interval import AffineInterval
 
@@ -336,9 +336,9 @@ class FVariable:
     def kif(self) -> tuple[bool, int, int]:
         if self.step == 0:
             return False, 0, 0
-        f = -int(log2(self.step))
+        f = -iceil_log2(self.step)
         xx = max(-self.low, self.high + self.step)
-        i = ceil(log2(xx))
+        i = iceil_log2(xx)
         k = self.low < 0
         return k, i, f
 

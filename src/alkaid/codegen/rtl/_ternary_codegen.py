@@ -1,6 +1,7 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from ...types import CombLogic, _iter_sum_terms
+from ...types import CombLogic, Precision, _iter_sum_terms
 
 
 @dataclass(frozen=True)
@@ -19,14 +20,17 @@ class TernaryLayout:
     drop_lsbs: int
 
 
-def ternary_layout(sol: CombLogic, op_idx: int) -> TernaryLayout:
+def ternary_layout(
+    sol: CombLogic,
+    op_idx: int,
+    kifs: Sequence[Precision],
+    widths: Sequence[int],
+) -> TernaryLayout:
     ops = sol.ops
     op = ops[op_idx]
     raw_terms = tuple((addr, 1 if plus else -1, shift) for addr, plus, shift in _iter_sum_terms(op))
     assert len(raw_terms) == 3
 
-    kifs = [op.qint.kif for op in ops]
-    widths = list(map(sum, kifs))
     term_fracs = [kifs[idx].fractional - shift for idx, _, shift in raw_terms]
     align_f = max(term_fracs)
     drop_lsbs = align_f - kifs[op_idx].fractional
@@ -53,16 +57,27 @@ def _generic_values(layout: TernaryLayout) -> list[int]:
     return values
 
 
-def verilog_ternary_line(sol: CombLogic, op_idx: int, out_def: str) -> str:
-    layout = ternary_layout(sol, op_idx)
+def verilog_ternary_line(
+    sol: CombLogic,
+    op_idx: int,
+    out_def: str,
+    kifs: Sequence[Precision],
+    widths: Sequence[int],
+) -> str:
+    layout = ternary_layout(sol, op_idx, kifs, widths)
     params = ','.join(map(str, [*_generic_values(layout), layout.out_width, layout.drop_lsbs]))
     ports = [f'v{term.addr}[{term.width - 1}:0]' for term in layout.terms]
     ports.append(f'v{op_idx}[{layout.out_width - 1}:0]')
     return f'{out_def} ternary_adder #({params}) op_{op_idx} ({",".join(ports)});'
 
 
-def vhdl_ternary_line(sol: CombLogic, op_idx: int) -> str:
-    layout = ternary_layout(sol, op_idx)
+def vhdl_ternary_line(
+    sol: CombLogic,
+    op_idx: int,
+    kifs: Sequence[Precision],
+    widths: Sequence[int],
+) -> str:
+    layout = ternary_layout(sol, op_idx, kifs, widths)
     generics = []
     for pos, term in enumerate(layout.terms):
         generics.extend(
