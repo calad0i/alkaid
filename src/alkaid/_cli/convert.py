@@ -4,7 +4,11 @@ from pathlib import Path
 
 import numpy as np
 
+from alkaid.codegen import HLSModel, RTLModel
+from alkaid.converter import trace_model
+from alkaid.trace import HWConfig, trace
 from alkaid.trace.passes import optimize
+from alkaid.types import CombLogic
 
 
 def to_alkaid(
@@ -30,10 +34,6 @@ def to_alkaid(
     n_stages: int = -1,
     no_ternary: bool = False,
 ):
-    from alkaid.codegen import HLSModel, RTLModel
-    from alkaid.converter import trace_model
-    from alkaid.trace import HWConfig, trace
-    from alkaid.types import CombLogic
 
     if flavor == 'auto':
         if path.suffix == '.json':
