@@ -35,7 +35,7 @@ def _makesure_ret_arr(fn: Callable) -> Callable:
     return wrapper
 
 
-_IGNORED_KWARGS = ('inplace', 'out', 'memory_format')
+_IGNORED_KWARGS = ('inplace', 'out', 'memory_format', 'dtype', 'device')
 
 
 def _strip_ignored_kwargs(fn: Callable) -> Callable:
@@ -674,6 +674,21 @@ for _t, _np in [
     _functional(_t)(_np)
 
 
+# tensor creations
+
+for _t, _np in [
+    (torch.empty, np.empty),
+    (torch.zeros, np.zeros),
+    (torch.ones, np.ones),
+    (torch.full, np.full),
+    (torch.empty_like, np.empty_like),
+    (torch.zeros_like, np.zeros_like),
+    (torch.ones_like, np.ones_like),
+    (torch.full_like, np.full_like),
+]:
+    _functional(_t)(_np)
+
+
 # Use Python operators for arithmetic so RetardedFVArray (from .apply) dispatches
 # through its own __mul__/__add__/etc. Numpy ufuncs would bypass that and lose the
 # delayed lookup-table operation.
@@ -806,6 +821,8 @@ def _replay_getattr(obj, name: str):
         return obj.shape
     if name == 'ndim':
         return obj.ndim
+    if name == 'dtype':
+        return obj.dtype
     # torch.max / torch.min / torch.sort return a namedtuple; our replay returns the
     # values tensor directly, so both accessors are identity.
     if name == 'values':
