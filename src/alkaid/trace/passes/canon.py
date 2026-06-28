@@ -4,8 +4,53 @@ from ...types import CombLogic, Op, QInterval
 
 def canonicalize(comb: CombLogic) -> CombLogic:
     comb = const_propagation(comb)
+    comb = canonicalize_msb_wraps(comb)
     comb = canonicalize_outputs(comb)
     return comb
+
+
+def canonicalize_msb_wraps(comb: CombLogic) -> CombLogic:
+    """Normalize wraps that already describe the source MSB bit."""
+
+    ops = comb.ops.copy()
+    uses: dict[int, list[int]] = {i: [] for i in range(len(ops))}
+    for i, op in enumerate(ops):
+        for idx in op.addr:
+            uses[idx].append(i)
+    for idx in comb.out_idxs:
+        if idx >= 0:
+            uses[idx].append(-1)
+
+    for i, op in enumerate(ops):
+        if op.opcode != 3 or op.data[0] == 0:
+            continue
+        if op.qint.min != 0 or op.qint.max != op.qint.step:
+            continue
+        src_k, src_i, _ = ops[op.addr[0]].qint.kif
+        step = 2.0 ** (src_i + int(src_k) - 1)
+        if op.qint.step == step:
+            ops[i] = Op(op.addr, op.opcode, (0,), op.qint, op.latency, op.cost)
+            continue
+        if len(uses[i]) != 1:
+            continue
+        if uses[i][0] < 0:
+            continue
+        use = ops[uses[i][0]]
+        if use.opcode != 9 or use.data[0] != 0:
+            continue
+        ops[i] = Op(op.addr, op.opcode, (0,), QInterval(0.0, step, step), op.latency, op.cost)
+
+    return CombLogic(
+        comb.shape,
+        comb.inp_shifts,
+        comb.out_idxs,
+        comb.out_shifts,
+        comb.out_negs,
+        ops,
+        comb.carry_size,
+        comb.adder_size,
+        comb.lookup_tables,
+    )
 
 
 def const_propagation(comb: CombLogic) -> CombLogic:

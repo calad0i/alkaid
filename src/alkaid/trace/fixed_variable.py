@@ -648,7 +648,7 @@ class FVariable:
             if self.high < 0:
                 return FVariable.from_const(all_ones, hwconf=self.hwconf)
             low_v, high_v = (all_ones, 0.0) if k else (0.0, all_ones)
-            return FVariable(low_v, high_v, step, _from=(self,), _factor=abs(self._factor), opr='wrap', hwconf=self.hwconf)
+            return FVariable(low_v, high_v, step, _from=(self,), _factor=1.0, opr='wrap', hwconf=self.hwconf)
         if not _k and f <= -_i:
             return FVariable.from_const(0.0, hwconf=self.hwconf)
 
@@ -668,7 +668,7 @@ class FVariable:
             high,
             step,
             _from=(self,),
-            _factor=abs(self._factor),
+            _factor=1.0,
             opr='wrap',
             hwconf=self.hwconf,
         )
@@ -710,7 +710,7 @@ class FVariable:
         if self.opr == 'wrap':
             k, i, _ = self.kif
             k0, i0, _ = self._from[0].kif
-            _factor = self._factor
+            _factor = self._factor * abs(self._from[0]._factor)
             _factor0 = self._from[0]._factor
             if k + i == k0 + i0 + log2(abs(_factor / _factor0)):
                 return self._from[0].msb_mux(a, b, qint=qint)
@@ -1148,7 +1148,7 @@ class FVariableInput(FVariable):
             high,
             step,
             _from=(self,),
-            _factor=self._factor,
+            _factor=1.0,
             opr='wrap',
             hwconf=self.hwconf,
         )

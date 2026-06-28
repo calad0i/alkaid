@@ -108,7 +108,8 @@ def _trace(inputs: Sequence[FVariable], outputs: Sequence[FVariable]):
                 id0 = index[v0.id] + (v0._factor < 0)
                 assert id0 < ii, f'{id0} {ii} {v.id}'
                 opcode = 3
-                op = Op((id0,), opcode, (), v.unscaled.qint, v.latency, 0.0)
+                data = (int(log2(abs(v0._factor))),)
+                op = Op((id0,), opcode, data, v.unscaled.qint, v.latency, 0.0)
             case 'relu':
                 v0 = v._from[0]
                 id0 = index[v0.id] + (v0._factor < 0)

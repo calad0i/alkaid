@@ -157,7 +157,8 @@ def _build_core_ops(bb, pkg, sol, model_inp, inp_starts, inp_widths, kifs, width
 
             case 3:  # Quantize (bit slice with possible sign extension)
                 a = op.addr[0]
-                lsb_bias = kifs[a][2] - kifs[i][2]
+                relative_shift = op.data[0]
+                lsb_bias = kifs[a][2] - relative_shift - kifs[i][2]
                 i0 = bw + lsb_bias - 1
                 v0 = buf[a]
                 bw0 = widths[a]

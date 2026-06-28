@@ -183,7 +183,9 @@ namespace alir {
             case 3: {
                 const uint32_t x = op_addr(raw, addr_pool, i, 0);
                 const DType &d0 = dtypes[x];
-                const int32_t reduce = d0.fractionals - d_out.fractionals;
+                const int8_t relative_shift =
+                    raw.opcode == 3 ? static_cast<int8_t>(op_data(raw, data_pool, i, 0)) : 0;
+                const int32_t reduce = d0.fractionals - relative_shift - d_out.fractionals;
                 op.reduce = Op_ReluQuant{};
                 op.reduce.h.opcode = static_cast<int8_t>(raw.opcode);
                 op.reduce.h.flags = flag_signed;

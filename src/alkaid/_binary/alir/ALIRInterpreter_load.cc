@@ -61,7 +61,8 @@ namespace alir {
         if (version != alir_version) {
             throw std::runtime_error(
                 "ALIR version mismatch: expected version " + std::to_string(alir_version) + ", got version " +
-                std::to_string(version) + ". Run `alkaid upgrade INPUT OUTPUT` for v2 JSON files."
+                std::to_string(version) +
+                ". Run `alkaid convert INPUT OUTPUT --flavor json` for older JSON files."
             );
         }
 

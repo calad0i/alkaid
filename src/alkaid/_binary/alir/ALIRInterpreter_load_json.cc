@@ -57,7 +57,7 @@ namespace alir {
                 "ALIR JSON spec version mismatch: expected " + std::to_string(alir_version) + ", got " +
                 (doc.contains("spec_version") ? std::to_string(doc["spec_version"].get<int>())
                                               : std::string("<missing>")) +
-                ". Run `alkaid upgrade INPUT OUTPUT` to convert v2 JSON first."
+                ". Run `alkaid convert INPUT OUTPUT --flavor json` to convert older JSON first."
             );
         }
         if (!doc.contains("meta") || doc["meta"].get<std::string>() != "ALIRModel") {
@@ -109,7 +109,7 @@ namespace alir {
             const json &jo = jops[i];
             if (!jo.is_array() || jo.size() != 6)
                 throw std::runtime_error(
-                    "ALIR JSON op " + std::to_string(i) + " is not a v3 length-6 record"
+                    "ALIR JSON op " + std::to_string(i) + " is not a v4 length-6 record"
                 );
             const json &addr = jo[0];
             const int32_t opcode = jo[1].get<int32_t>();

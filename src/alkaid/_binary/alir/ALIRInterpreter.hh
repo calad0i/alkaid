@@ -41,7 +41,7 @@ namespace alir {
         template <int B> void exec_batch_core(const double *inputs, size_t batch_size, int64_t *buffer) const;
 
       public:
-        static const int alir_version = 3;
+        static const int alir_version = 4;
 
         void load_from_bytecode(const std::span<const uint8_t> &binary_data);
 

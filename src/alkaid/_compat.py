@@ -1,10 +1,6 @@
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
 from .types import Op, QInterval
-
-if TYPE_CHECKING:
-    from .types import Op
 
 
 def _s32(v: int) -> int:
@@ -51,3 +47,46 @@ def _op_from_v2_record(record: Sequence) -> Op:
         case _:
             raise ValueError(f'Unknown v2 opcode {opcode}')
     return op
+
+
+def _op_from_v3_record(record: Sequence) -> Op:
+    addr, opcode, payload, qint, latency, cost = record
+    return Op(tuple(int(v) for v in addr), int(opcode), tuple(int(v) for v in payload), QInterval(*qint), latency, cost)
+
+
+def _upgrade_v2_to_v3(data: Sequence) -> list:
+    data = list(data)
+    data[5] = [_op_from_v2_record(op) for op in data[5]]
+    return data
+
+
+def _upgrade_v3_to_v4(data: Sequence) -> list:
+    data = list(data)
+    ops = []
+    for record in data[5]:
+        op = _op_from_v3_record(record)
+        if op.opcode == 3:
+            op = Op(op.addr, op.opcode, (0,), op.qint, op.latency, op.cost)
+        ops.append(op)
+    data[5] = ops
+    return data
+
+
+_UPGRADE_STEPS = {
+    2: (3, _upgrade_v2_to_v3),
+    3: (4, _upgrade_v3_to_v4),
+}
+
+
+def compatible_upgrade_versions() -> tuple[int, ...]:
+    return tuple(sorted(_UPGRADE_STEPS))
+
+
+def upgrade_model_data(data: Sequence, spec_version: int | None, target_version: int) -> list:
+    data = list(data)
+    while spec_version != target_version:
+        if spec_version not in _UPGRADE_STEPS:
+            raise ValueError(f'Cannot upgrade ALIR spec version {spec_version} to {target_version}')
+        spec_version, upgrade = _UPGRADE_STEPS[spec_version]
+        data = upgrade(data)
+    return data

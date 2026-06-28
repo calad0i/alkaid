@@ -7,7 +7,7 @@ from alkaid.trace.ops import quantize
 from alkaid.types import CombLogic
 
 
-def v2_operation(x):  # x[16,4]
+def v2_v3_operation(x):  # x[16,4]
     x = quantize(x, 1, 8, 4)
     a = np.maximum(x, 0)
     b = x[:, 1::2].T
@@ -24,9 +24,19 @@ def v2_operation(x):  # x[16,4]
 
 def test_compat_v2():
     inp = FVArray.new((16, 4))
-    out = v2_operation(inp)
+    out = v2_v3_operation(inp)
     comb = trace(inp, out)
     comb_load = CombLogic.load(Path(__file__).parent / '_legacy_models/v2.json.gz')
-    assert all(
-        op1.opcode == op2.opcode and op1.addr == op2.addr and op1.data == op2.data for op1, op2 in zip(comb.ops, comb_load.ops)
-    )
+    rng = np.random.default_rng(0)
+    data = rng.normal(size=(32, 16, 4)).astype(np.float32)
+    np.testing.assert_equal(comb.predict(data, n_threads=1), comb_load.predict(data, n_threads=1))
+
+
+def test_compat_v3():
+    inp = FVArray.new((16, 4))
+    out = v2_v3_operation(inp)
+    comb = trace(inp, out)
+    comb_load = CombLogic.load(Path(__file__).parent / '_legacy_models/v3.json.gz')
+    rng = np.random.default_rng(0)
+    data = rng.normal(size=(32, 16, 4)).astype(np.float32)
+    np.testing.assert_equal(comb.predict(data, n_threads=1), comb_load.predict(data, n_threads=1))

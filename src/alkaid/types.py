@@ -17,7 +17,7 @@ from ._binary import (
     minimal_kif_scalar,
 )
 
-ALIR_SPEC_VERSION = 3
+ALIR_SPEC_VERSION = 4
 ALIR_BYTECODE_MAGIC = b'ALIR'
 
 
@@ -253,7 +253,9 @@ class CombLogic(NamedTuple):
                     case 2:
                         op_str = f'relu(buf[{op.addr[0]}])'
                     case 3:
-                        op_str = f'quantize(buf[{op.addr[0]}])'
+                        shift = op.data[0]
+                        source = f'buf[{op.addr[0]}]' if shift == 0 else f'buf[{op.addr[0]}] * 2^{shift}'
+                        op_str = f'quantize({source})'
                     case 4:
                         val = op.data[0] * 2 ** -op.data[1]
                         op_str = f'buf[{op.addr[0]}] + {val}'
@@ -311,8 +313,9 @@ class CombLogic(NamedTuple):
                 ret = _relu(v, _i, _f, round_mode='TRN')
             case 3:  # quantize(+/-x)
                 v = buf[op.addr[0]]
+                shift = op.data[0]
                 _k, _i, _f = op.qint.kif
-                ret = _quantize(v, _k, _i, _f, round_mode='TRN')
+                ret = _quantize(v * 2.0**shift, _k, _i, _f, round_mode='TRN')
             case 4:  # const addition
                 val = op.data[0] * 2 ** -op.data[1]
                 ret = buf[op.addr[0]] + val
@@ -453,7 +456,7 @@ class CombLogic(NamedTuple):
             payload = tuple(int(v) for v in payload)
             for value in payload:
                 if value < -(1 << 63) or value >= (1 << 63):
-                    raise ValueError(f'ALIR v3 op data value outside int64 range: {value}')
+                    raise ValueError(f'ALIR v4 op data value outside int64 range: {value}')
             op = Op(tuple(int(v) for v in addr), int(opcode), payload, QInterval(*qint), latency, cost)
             ops.append(op)
         assert len(data) in (8, 9), f'{len(data)}'
@@ -476,8 +479,8 @@ class CombLogic(NamedTuple):
 
     @staticmethod
     def upgrade_dict(dump: dict) -> dict:
-        """Return a v3 ALIR JSON dictionary converted from a v2 dictionary."""
-        from ._compat import _op_from_v2_record
+        """Return a v4 ALIR JSON dictionary converted from an older dictionary."""
+        from ._compat import compatible_upgrade_versions, upgrade_model_data
 
         spec_version = dump.get('spec_version')
         if spec_version == ALIR_SPEC_VERSION:
@@ -485,15 +488,14 @@ class CombLogic(NamedTuple):
         if dump.get('meta') not in ('ALIRModel', 'DAISModel'):
             raise ValueError(f'Unknown model type {dump.get("meta")}')
 
-        match spec_version:
-            case 2:
-                data = list(dump['model'])
-                data[5] = [_op_from_v2_record(op) for op in data[5]]
-                return {'model': data, 'meta': 'ALIRModel', 'spec_version': ALIR_SPEC_VERSION}
-            case _:
-                raise ValueError(
-                    f'Cannot handle ALIR spec version {spec_version}; current version: {ALIR_SPEC_VERSION}, competible upgrade versions: 2'
-                )
+        try:
+            data = upgrade_model_data(dump['model'], spec_version, ALIR_SPEC_VERSION)
+        except ValueError as exc:
+            versions = ', '.join(map(str, compatible_upgrade_versions()))
+            raise ValueError(
+                f'Cannot handle ALIR spec version {spec_version}; current version: {ALIR_SPEC_VERSION}, compatible upgrade versions: {versions}'
+            ) from exc
+        return {'model': data, 'meta': 'ALIRModel', 'spec_version': ALIR_SPEC_VERSION}
 
     @classmethod
     def load(cls, path: str | Path):

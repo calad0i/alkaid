@@ -102,8 +102,9 @@ def ssa_gen(comb: CombLogic, print_latency: bool, typestr_fn: Callable[[bool | i
                 else:
                     val = ref0
             case 3:
-                # Explicit quantization op, done implicitly via assignment
-                val = ref0
+                # Explicit quantization op, with wrap-specific source scale applied before assignment.
+                relative_shift = op.data[0]
+                val = ref0 if relative_shift == 0 else f'bit_shift<{relative_shift}>({ref0})'
             case 4:
                 # Constant addition
                 v, f = op.data

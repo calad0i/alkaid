@@ -6,6 +6,8 @@ def null_quant_elimin(comb: CombLogic) -> CombLogic:
     _map: dict[int, int] = {}
     for i, op in enumerate(comb.ops):
         if op.opcode in (2, 3):  # null quantizer/relu
+            if op.opcode == 3 and op.data[0] != 0:
+                continue
             src_idx = op.addr[0]
             src = comb.ops[_map.get(src_idx, src_idx)]
             if src.qint != op.qint:

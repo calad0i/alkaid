@@ -6,7 +6,7 @@ ALIR is alkaid's low-level static-dataflow representation. A `CombLogic` program
 The serialized JSON form written by `CombLogic.save()` is:
 
 - `meta`: the string `ALIRModel`.
-- `spec_version`: the ALIR spec version. The current version is `3`.
+- `spec_version`: the ALIR spec version. The current version is `4`.
 - `model`: the `CombLogic` payload described below.
 
 ## `CombLogic` Payload
@@ -52,8 +52,9 @@ For non-input operations, every `addr` index must refer only to an earlier opera
   - `addr = (x,)`, `data = ()`.
   - `buf[i] = quantize(relu(buf[x]))`
 - `3`: Output quantization.
-  - `addr = (x,)`, `data = ()`.
-  - `buf[i] = quantize(buf[x])`
+  - `addr = (x,)`, `data = (relative_shift,)`.
+  - `buf[i] = quantize(buf[x] * 2^relative_shift)`.
+  - `relative_shift` records the source-to-wrap-buffer scale shift needed when tracing-level wrap resets its implementation `_factor`.
 - `4`: Add a constant.
   - `addr = (x,)`, `data = (value, shift)`.
   - The constant is `value * 2^-shift`.
@@ -115,4 +116,4 @@ For opcode `8`, bytecode contains the semantic lookup table index plus an intern
 
 Lookup table data is stored in increasing lookup-index order. The bytecode loader validates the magic, ALIR spec version, bytecode length, generic address causality, ranges, EOF, and the interpreter's current 64-bit intermediate-width limit.
 
-The JSON loader in the C++ interpreter accepts v3 plain JSON and gzip-compressed JSON with the same `ALIRModel` wrapper used by `CombLogic.save()`. v2 files can be loaded in python, but C++ json loader only accepts v3. Use `alkaid convert v2.json[.gz] v3.json[.gz]` to convert on disk.
+The JSON loader in the C++ interpreter accepts v4 plain JSON and gzip-compressed JSON with the same `ALIRModel` wrapper used by `CombLogic.save()`. v2 and v3 files can be loaded in Python, but the C++ JSON loader only accepts v4. Use `alkaid convert old.json[.gz] new.json[.gz] --flavor json` to convert on disk.

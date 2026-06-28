@@ -94,7 +94,8 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
 
             case 3:  # Explicit quantization
                 a = op.addr[0]
-                lsb_bias = kifs[a][2] - kifs[i][2]
+                relative_shift = op.data[0]
+                lsb_bias = kifs[a][2] - relative_shift - kifs[i][2]
                 i0, i1 = bw + lsb_bias - 1, lsb_bias
                 v0_name = f'v{a}'
                 bw0 = widths[a]
