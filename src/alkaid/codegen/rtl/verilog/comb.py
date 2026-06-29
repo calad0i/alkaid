@@ -204,7 +204,7 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
 
 def output_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]]) -> list[str]:
     lines = []
-    widths = sol.out_kifs.sum(axis=0).tolist()
+    widths = np.atleast_1d(sol.out_kifs.sum(axis=0)).tolist()
 
     _widths = np.cumsum([0] + widths)
     out_idxs = np.stack([_widths[1:] - 1, _widths[:-1]], axis=1)

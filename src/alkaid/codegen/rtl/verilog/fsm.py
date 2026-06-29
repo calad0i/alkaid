@@ -99,11 +99,16 @@ def gen_assignments_conn(conn: Conn) -> str:
         block = assignments_str
 
     if conn.clocked:
-        if conn.dst.rst_if is not None:
+        if conn.dst.rst_if is not None and conn.dst.rst_to is not None:
             rst_sig = conn.dst.rst_if
             rst_sig_name = f'{rst_sig.name}[{rst_sig.view[0]}]' if rst_sig.raw.width > 1 else rst_sig.name
+            rst_val = _rst_bin(conn.dst)
             block = block.replace('\n', '\n    ')
-            block = f'    if (~{rst_sig_name}) begin: _not_rst\n{block}\n    end'
+            block = (
+                f'    if ({rst_sig_name}) begin: _reset_{conn.dst.name}\n'
+                f'        {conn.dst.name} <= {rst_val};\n'
+                f'    end else begin: _not_rst_{conn.dst.name}\n{block}\n    end'
+            )
         return block
     else:
         return block
@@ -197,27 +202,8 @@ def fsm_logic_gen(
     else:
         initial = ''
 
-    # reset
-
-    sig_need_reset = [sig for sig in sig_need_initial if sig.rst_if is not None]
-    if sig_need_reset:
-        rst_blocks = []
-        for sig in sig_need_reset:
-            rst_sig = sig.rst_if
-            assert rst_sig is not None
-            rst_sig_name = f'{rst_sig.name}[{rst_sig.view[0]}]' if rst_sig.raw.width > 1 else rst_sig.name
-            rst_val = _rst_bin(sig)
-            rst_block = f"""    if ({rst_sig_name}) begin: _reset_{sig.name}
-        {sig.name} <= {rst_val};
-    end"""
-            rst_blocks.append(rst_block)
-        rst_block_str = '\n'.join(rst_blocks)
-        rst_block_str = '\n\n    always @(posedge clk) begin\n' + rst_block_str.replace('\n', '\n    ') + '\n    end'
-    else:
-        rst_block_str = ''
-
     module_body = '\n    '.join([signal_defs] + [''] + comb_ops + [''] + conns)
-    module_body += reg_assignment_block + initial + rst_block_str
+    module_body += reg_assignment_block + initial
 
     module = f'{module_header}\n\n{module_body}\n\nendmodule\n'
     if timescale:
