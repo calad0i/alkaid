@@ -39,6 +39,7 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE
           pip install meson-python ninja
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
           pip install --no-build-isolation -e '.[tests]'
 
       - name: Run tests
