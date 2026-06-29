@@ -168,7 +168,7 @@ class Signal:
         return len(self.precisions)
 
     def to_list(self) -> list:
-        """Serialize the full (un-sliced) signal to JSON-native types.
+        """Serialize the signal to JSON-native types.
 
         ``rst_if`` is stored by name; the reference is re-linked on load.
         """
@@ -182,12 +182,13 @@ class Signal:
             self.schedule.to_list() if self.schedule is not None else None,
             self.mode,
             self.attrs,
+            list(self.view),
             [self._dynamic_bias[0].to_list(), self._dynamic_bias[1]] if self._dynamic_bias is not None else None,
         ]
 
     @classmethod
     def from_list(cls, lst: list) -> 'Signal':
-        name, exposed, precisions, _rst_if_name, rst_to, reg, schedule, mode, attrs, _dynamic_bias = lst
+        name, exposed, precisions, _rst_if_name, rst_to, reg, schedule, mode, attrs, view, _dynamic_bias = lst
         return cls(
             name,
             exposed,
@@ -197,6 +198,7 @@ class Signal:
             reg=reg,
             schedule=schedule,
             mode=mode,
+            view=tuple(view),
             attrs=attrs,
             _dynamic_bias=(Signal.from_list(_dynamic_bias[0]), _dynamic_bias[1]) if _dynamic_bias is not None else None,
         )
