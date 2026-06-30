@@ -16,11 +16,7 @@ set delay_min [expr {$clock_period * $delay_min_r}]
 create_clock -period $clock_period -name sys_clk [get_ports {clk}]
 
 # Input/Output constraints
-set_input_delay -clock sys_clk -max $delay_max [get_ports {model_inp[*]}]
-set_input_delay -clock sys_clk -min $delay_min [get_ports {model_inp[*]}]
-
-set_output_delay -clock sys_clk -max $delay_max [get_ports {model_out[*]}]
-set_output_delay -clock sys_clk -min $delay_min [get_ports {model_out[*]}]
+$::env(IO_DELAY_CONSTRAINTS)
 
 # Apply calculated uncertainty values
 set_clock_uncertainty -setup -to [get_clocks sys_clk] $uncertainty_setup

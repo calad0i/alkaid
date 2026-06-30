@@ -86,10 +86,30 @@ def _write_ooc_scripts(
             f.write(tcl)
 
 
+def _io_delay_constraint_lines(kind: str, signals: Sequence[Signal]) -> str:
+    assert kind in ('input', 'output')
+    lines = []
+    for sig in signals:
+        port = f'{{{sig.name}[*]}}'
+        lines.append(f'set_{kind}_delay -clock sys_clk -max $delay_max [get_ports {port}]')
+        lines.append(f'set_{kind}_delay -clock sys_clk -min $delay_min [get_ports {port}]')
+    return '\n'.join(lines)
+
+
+def _io_delay_constraints(fsm: FSM) -> str:
+    sections = []
+    if fsm.inp_signals:
+        sections.append(f'# Input constraints\n{_io_delay_constraint_lines("input", fsm.inp_signals)}')
+    if fsm.out_signals:
+        sections.append(f'# Output constraints\n{_io_delay_constraint_lines("output", fsm.out_signals)}')
+    return '\n\n'.join(sections)
+
+
 def _write_constraints(
     src_root: Path,
     out_dir: Path,
     prj_name: str,
+    fsm: FSM,
     clock_period: float,
     clock_uncertainty: float,
     io_delay_minmax: tuple[float, float],
@@ -102,6 +122,7 @@ def _write_constraints(
         constraint = constraint.replace('$::env(UNCERTAINITY_HOLD)', str(clock_uncertainty))
         constraint = constraint.replace('$::env(DELAY_MAX)', str(io_delay_minmax[1]))
         constraint = constraint.replace('$::env(DELAY_MIN)', str(io_delay_minmax[0]))
+        constraint = constraint.replace('$::env(IO_DELAY_CONSTRAINTS)', _io_delay_constraints(fsm))
         with open(out_dir / f'src/{prj_name}.{fmt}', 'w') as f:
             f.write(constraint)
 
@@ -238,6 +259,7 @@ class RTLModel:
         self._clock_uncertainty = clock_uncertainty
         self._io_delay_minmax = io_delay_minmax
         self._comb: CombLogic | None = None
+        self._dirty = False
 
         if isinstance(logic, CombLogic):
             autopipeline = n_stages > 0 or latency_cutoff > 0
@@ -319,11 +341,12 @@ class RTLModel:
             shutil.copy(path, self._path / 'src/static')
 
         _write_ooc_scripts(self.__src_root, self._path, self._prj_name, flavor, self._part_name)
-        if self._comb is not None and any(sig.reg for sig in self.fsm.signals.values()):
+        if any(sig.reg for sig in self.fsm.signals.values()):
             _write_constraints(
                 self.__src_root,
                 self._path,
                 self._prj_name,
+                self.fsm,
                 self._clock_period,
                 self._clock_uncertainty,
                 self._io_delay_minmax,
@@ -371,6 +394,7 @@ class RTLModel:
             _metadata.update({k: v for k, v in metadata.items() if k not in _metadata})
         with open(self._path / 'metadata.json', 'w') as f:
             json.dump(_metadata, f)
+        self._dirty = flavor != 'verilog' or xls_opt
 
     def _compile(
         self,
@@ -388,10 +412,9 @@ class RTLModel:
         env['SOURCE_TYPE'] = self._flavor
         env['STAMP'] = self._uuid
         env['EXTRA_CXXFLAGS'] = '-fopenmp' if openmp else ''
-        if self._flavor == 'verilog':
-            env['VERILATOR_FLAGS'] = f'-Wall {verilator_warn_suppression()}'.strip()
-        else:
-            env['VERILATOR_FLAGS'] = verilator_warn_suppression()
+        env['VERILATOR_FLAGS'] = verilator_warn_suppression()
+        if not self._dirty:
+            env['VERILATOR_FLAGS'] = '-Wall ' + env['VERILATOR_FLAGS']
         if _env is not None:
             env.update(_env)
         if nproc is not None:
