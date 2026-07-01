@@ -15,8 +15,7 @@ from ...stateful import FSM, Signal
 from ...trace.passes import dead_code_elimin, fuse_ternary_adders
 from ...trace.pipeline import to_pipeline
 from ...types import CombLogic, Precision
-from ._utils import at_path, canon_name, run_make_build, verilator_warn_suppression
-from .verilog.comb import table_mem_gen
+from ._utils import canon_name, run_make_build, verilator_warn_suppression
 
 P_I64 = ctypes.POINTER(ctypes.c_int64)
 P_F64 = ctypes.POINTER(ctypes.c_double)
@@ -301,7 +300,6 @@ class RTLModel:
         no_shreg: bool = False,
     ):
         (self._path / 'src/static').mkdir(parents=True, exist_ok=True)
-        (self._path / 'src/memfiles').mkdir(parents=True, exist_ok=True)
         (self._path / 'sim').mkdir(parents=True, exist_ok=True)
         (self._path / 'model').mkdir(parents=True, exist_ok=True)
 
@@ -329,13 +327,6 @@ class RTLModel:
         for name, code in codes.items():
             with open(self._path / f'src/{name}.{suffix}', 'w') as f:
                 f.write(code)
-
-        memfiles: dict[str, str] = {}
-        for comb in self.fsm.logic.values():
-            memfiles.update(table_mem_gen(comb))
-        for name, mem in memfiles.items():
-            with open(self._path / 'src/memfiles' / name, 'w') as f:
-                f.write(mem)
 
         for path in self.__src_root.glob(f'{flavor}/source/*.{suffix}'):
             shutil.copy(path, self._path / 'src/static')
@@ -492,8 +483,7 @@ class RTLModel:
         self._destroy()
         self._lib = ctypes.CDLL(str(lib_path))
         self._configure_lib()
-        with at_path(self._path / 'src/memfiles'):
-            self._handle = ctypes.c_void_p(self._lib.fsm_create())
+        self._handle = ctypes.c_void_p(self._lib.fsm_create())
 
     def _is_loaded(self):
         return hasattr(self, '_lib') and hasattr(self, '_handle')
@@ -625,10 +615,7 @@ class RTLModel:
 
         if n_threads < 0:
             n_threads = 1
-        with at_path(self._path / 'src/memfiles'):
-            self._lib.fsm_run(
-                self._handle, input_data, input_n_samples, output_data, steps, extra_steps, int(scheduled), n_threads
-            )
+        self._lib.fsm_run(self._handle, input_data, input_n_samples, output_data, steps, extra_steps, int(scheduled), n_threads)
 
         return results
 

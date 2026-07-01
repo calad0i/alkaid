@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from ...types import CombLogic, Precision, _iter_sum_terms
+from ....types import CombLogic, Precision, _iter_sum_terms
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ def _generic_values(layout: TernaryLayout) -> list[int]:
     return values
 
 
-def verilog_ternary_line(
+def ternary_line(
     sol: CombLogic,
     op_idx: int,
     out_def: str,
@@ -69,27 +69,3 @@ def verilog_ternary_line(
     ports = [f'v{term.addr}[{term.width - 1}:0]' for term in layout.terms]
     ports.append(f'v{op_idx}[{layout.out_width - 1}:0]')
     return f'{out_def} ternary_adder #({params}) op_{op_idx} ({",".join(ports)});'
-
-
-def vhdl_ternary_line(
-    sol: CombLogic,
-    op_idx: int,
-    kifs: Sequence[Precision],
-    widths: Sequence[int],
-) -> str:
-    layout = ternary_layout(sol, op_idx, kifs, widths)
-    generics = []
-    for pos, term in enumerate(layout.terms):
-        generics.extend(
-            [
-                f'BW_INPUT{pos}=>{term.width}',
-                f'SIGNED{pos}=>{term.signed}',
-                f'NEGATE{pos}=>{term.negate}',
-                f'PAD{pos}=>{term.pad}',
-            ]
-        )
-    generics.extend([f'BW_OUT=>{layout.out_width}', f'DROP_LSBS=>{layout.drop_lsbs}'])
-
-    ports = [f'in{pos}=>v{term.addr}' for pos, term in enumerate(layout.terms)]
-    ports.append(f'result=>v{op_idx}')
-    return f'op_{op_idx}:entity work.ternary_adder generic map({",".join(generics)}) port map({",".join(ports)});'

@@ -1,22 +1,8 @@
-import os
 import re
 import subprocess
 import sys
 import warnings
 from pathlib import Path
-
-
-class at_path:
-    def __init__(self, path: str | Path):
-        self._path = Path(path)
-        self._orig_cwd: Path | None = None
-
-    def __enter__(self):
-        self._orig_cwd = Path.cwd()
-        os.chdir(self._path)
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        os.chdir(self._orig_cwd)  # type: ignore[arg-type]
 
 
 def canon_name(name: str) -> str:

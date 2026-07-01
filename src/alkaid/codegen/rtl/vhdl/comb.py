@@ -3,8 +3,8 @@ from math import ceil, log2
 import numpy as np
 
 from ....types import CombLogic
-from .._ternary_codegen import vhdl_ternary_line
-from ..verilog.comb import get_table_name_memfile
+from .lookup import lookup_name
+from .ternary import ternary_line
 
 
 def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency: bool = False):
@@ -125,10 +125,9 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
                 line = f'op_{i}:entity work.multiplier generic map(BW_INPUT0=>{bw0},BW_INPUT1=>{bw1},SIGNED0=>{s0},SIGNED1=>{s1},BW_OUT=>{bw}) port map(in0=>v{a},in1=>v{b},result=>v{i});'
 
             case 8:  # Lookup Table
-                name = get_table_name_memfile(sol, op)[0]
+                name = lookup_name(sol, op)
                 a = op.addr[0]
-                bw0 = widths[a]
-                line = f'op_{i}:entity work.lookup_table generic map(BW_IN=>{bw0},BW_OUT=>{bw},MEM_FILE=>"{name}") port map(inp=>v{a},outp=>v{i});'
+                line = f'op_{i}:entity work.{name} port map(inp=>v{a},outp=>v{i});'
 
             case 9:  # Bitwise unary ops
                 v0_name = f'v{op.addr[0]}'
@@ -155,7 +154,7 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
 
                 line = f'op_{i}:entity work.binop generic map(BW_INPUT0=>{bw0},BW_INPUT1=>{bw1},SIGNED0=>{s0},SIGNED1=>{s1},BW_OUT=>{bw},SHIFT1=>{shift},SUBOP=>{subop}) port map(in0=>{v0_name},in1=>{v1_name},result=>v{i});'
             case 11:
-                line = vhdl_ternary_line(sol, i, kifs, widths)
+                line = ternary_line(sol, i, kifs, widths)
             case _:
                 raise ValueError(f'Unknown opcode {op.opcode} for operation {i} ({op})')
 

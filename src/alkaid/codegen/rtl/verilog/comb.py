@@ -1,36 +1,10 @@
-from hashlib import sha256
 from math import ceil, log2
-from uuid import UUID
 
 import numpy as np
 
-from ....types import CombLogic, Op
-from .._ternary_codegen import verilog_ternary_line
-
-
-def gen_memfile(sol: CombLogic, op: Op) -> str:
-    assert op.opcode == 8
-    assert sol.lookup_tables is not None
-    table = sol.lookup_tables[op.data[0]]
-    width = sum(table.spec.out_kif)
-    ndigits = ceil(width / 4)
-    data = table.padded_table(sol.ops[op.addr[0]].qint)
-    mem_lines = []
-    for v in data:
-        if np.isnan(v):
-            line = 'X' * ndigits
-        else:
-            line = f'{hex(int(v) & ((1 << width) - 1))[2:].upper().zfill(ndigits)}'
-        mem_lines.append(line)
-    return '\n'.join(mem_lines)
-
-
-def get_table_name_memfile(sol: CombLogic, op: Op) -> tuple[str, str]:
-    memfile = gen_memfile(sol, op)
-    hash_obj = sha256(memfile.encode('utf-8'))
-    _int = int(hash_obj.hexdigest()[:32], 16)
-    uuid = UUID(int=_int, version=4)
-    return f'table_{str(uuid)}.mem', memfile
+from ....types import CombLogic
+from .lookup import lookup_name
+from .ternary import ternary_line
 
 
 def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency: bool = False) -> list[str]:
@@ -157,11 +131,10 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
                 line = f'{_def} multiplier #({bw0},{bw1},{s0},{s1},{bw}) op_{i} ({v0},{v1},{v});'
 
             case 8:  # Lookup Table
-                name = get_table_name_memfile(sol, op)[0]
+                name = lookup_name(sol, op)
                 a = op.addr[0]
-                bw0 = widths[a]
 
-                line = f'{_def} lookup_table #({bw0},{bw},"{name}") op_{i} (v{a}, {v});'
+                line = f'{_def} {name} op_{i} (v{a}, {v});'
 
             case 9:  # Bitwise Unary
                 v0_name = f'v{op.addr[0]}'
@@ -191,7 +164,7 @@ def ssa_gen(sol: CombLogic, neg_repo: dict[int, tuple[int, str]], print_latency:
                 line = f'{_def} binop #({bw0},{bw1},{s0},{s1},{bw},{shift},{subop}) op_{i} ({v0_name}, {v1_name}, {v});'
 
             case 11:
-                line = verilog_ternary_line(sol, i, _def, kifs, widths)
+                line = ternary_line(sol, i, _def, kifs, widths)
 
             case _:
                 raise ValueError(f'Unknown opcode {op.opcode} for operation {i} ({op})')
@@ -254,15 +227,3 @@ endmodule
     if timescale is not None:
         code = f'{timescale}\n\n{code}'
     return code
-
-
-def table_mem_gen(sol: CombLogic) -> dict[str, str]:
-    if not sol.lookup_tables:
-        return {}
-    mem_files = {}
-    for op in sol.ops:
-        if not op.opcode == 8:
-            continue
-        name, memfile = get_table_name_memfile(sol, op)
-        mem_files[name] = memfile
-    return mem_files

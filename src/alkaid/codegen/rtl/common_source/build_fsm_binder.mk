@@ -13,9 +13,11 @@ TOP_MODULE ?= $(VM_PREFIX)
 VMOD_PREFIX ?= $(TOP_MODULE)
 VERILOG_SOURCES = $(wildcard ../src/static/*.v) $(wildcard ../src/*.v)
 VHDL_STATIC_SOURCES = $(wildcard ../src/static/*.vhd)
-VHDL_TOP_SOURCE = ../src/$(TOP_MODULE).vhd
+VHDL_WRAPPER_SOURCE = ../src/$(TOP_MODULE).vhd
 VHDL_FSM_SOURCE = ../src/$(TOP_MODULE:_wrapper=).vhd
-VHDL_COMB_SOURCES = $(filter-out $(VHDL_TOP_SOURCE) $(VHDL_FSM_SOURCE),$(wildcard ../src/*.vhd))
+VHDL_TOP_SOURCES = $(VHDL_FSM_SOURCE) $(filter-out $(VHDL_FSM_SOURCE),$(VHDL_WRAPPER_SOURCE))
+VHDL_TABLE_SOURCES = $(wildcard ../src/*_tables.vhd)
+VHDL_COMB_SOURCES = $(filter-out $(VHDL_WRAPPER_SOURCE) $(VHDL_FSM_SOURCE) $(VHDL_TABLE_SOURCES),$(wildcard ../src/*.vhd))
 VHDL_SYNTH_SOURCE = $(TOP_MODULE).v
 
 ifneq ($(filter $(SOURCE_TYPE),verilog vhdl),$(SOURCE_TYPE))
@@ -28,14 +30,12 @@ else
 VERILATOR_SOURCES = $(VERILOG_SOURCES)
 endif
 
-$(VHDL_SYNTH_SOURCE): $(VHDL_STATIC_SOURCES) $(VHDL_COMB_SOURCES) $(VHDL_FSM_SOURCE) $(VHDL_TOP_SOURCE)
+$(VHDL_SYNTH_SOURCE): $(VHDL_STATIC_SOURCES) $(VHDL_TABLE_SOURCES) $(VHDL_COMB_SOURCES) $(VHDL_TOP_SOURCES)
 	mkdir -p obj_dir
-	cp ../src/memfiles/* ./ 2>/dev/null || true
-	ghdl -a --std=08 --workdir=obj_dir $(VHDL_STATIC_SOURCES) $(VHDL_COMB_SOURCES) $(VHDL_FSM_SOURCE) $(VHDL_TOP_SOURCE)
+	ghdl -a --std=08 --workdir=obj_dir $(VHDL_STATIC_SOURCES) $(VHDL_TABLE_SOURCES) $(VHDL_COMB_SOURCES) $(VHDL_TOP_SOURCES)
 	ghdl synth --std=08 --workdir=obj_dir --out=verilog $(TOP_MODULE) > $(VHDL_SYNTH_SOURCE)
 
 ./obj_dir/libV$(VMOD_PREFIX).a ./obj_dir/libverilated.a ./obj_dir/V$(VMOD_PREFIX)__ALL.a: $(VERILATOR_SOURCES)
-	cp ../src/memfiles/* ./ 2>/dev/null || true
 	verilator --cc -j $(N_JOBS) -build --top-module $(TOP_MODULE) --prefix V$(VMOD_PREFIX) $(VERILATOR_FLAGS) $(VERILATOR_SOURCES) -CFLAGS "$(CFLAGS)" -I../src -I../src/static
 
 $(LIBNAME): ./obj_dir/libV$(VMOD_PREFIX).a ./obj_dir/libverilated.a ./obj_dir/V$(VMOD_PREFIX)__ALL.a fsm_binder.cc fsm_config.hh fsm_wrapper.hh ioutil.hh

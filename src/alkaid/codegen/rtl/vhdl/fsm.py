@@ -6,6 +6,7 @@ from ....stateful import FSM, Conn, Signal
 from ....types import Precision
 from ..verilog.io_map import BitMap, gen_io_map
 from .comb import comb_logic_gen
+from .lookup import lookup_source
 
 
 def _rst_literal(sig: Signal) -> str:
@@ -180,9 +181,13 @@ def fsm_logic_gen(
     body = '\n    '.join(instances + [_conn_stmt(conn) for conn in fsm.comb_conns])
     decls = '\n    '.join(declarations)
 
-    ret = {
-        logic: comb_logic_gen_fn(comb, logic, print_latency=print_latency, timescale=None) for logic, comb in fsm.logic.items()
-    }
+    ret = {}
+    for logic, comb in fsm.logic.items():
+        ret[logic] = comb_logic_gen_fn(comb, logic, print_latency=print_latency, timescale=None)
+    if comb_logic_gen_fn is comb_logic_gen:
+        table_source = lookup_source(list(fsm.logic.values()))
+        if table_source:
+            ret[f'{name}_tables'] = table_source
     assert name not in ret, f'FSM name {name} conflicts with generated logic name'
     ret[name] = f"""library ieee;
 use ieee.std_logic_1164.all;

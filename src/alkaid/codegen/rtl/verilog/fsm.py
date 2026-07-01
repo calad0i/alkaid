@@ -6,6 +6,7 @@ from ....stateful import FSM, Conn, Signal
 from ....types import Precision
 from .comb import comb_logic_gen
 from .io_map import BitMap, gen_io_map
+from .lookup import lookup_source
 
 
 def _rst_bin(sig: Signal) -> str:
@@ -212,6 +213,10 @@ def fsm_logic_gen(
     ret: dict[str, str] = {}
     for _name, comb in fsm.logic.items():
         ret[_name] = comb_logic_gen_fn(comb, _name, print_latency=print_latency, timescale=timescale)
+    if comb_logic_gen_fn is comb_logic_gen:
+        table_source = lookup_source(list(fsm.logic.values()), timescale=timescale)
+        if table_source:
+            ret[f'{name}_tables'] = table_source
     assert name not in ret, f'FSM name {name} conflicts with logic name'
     ret[name] = module
     return ret

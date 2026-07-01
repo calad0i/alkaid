@@ -24,11 +24,26 @@ if { "${source_type}" != "vhdl" && "${source_type}" != "verilog" } {
 if { "${source_type}" == "vhdl" } {
     set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
 
-    foreach file [glob -nocomplain "${prj_root}/src/static/*.vhd"] {
+    foreach file [lsort [glob -nocomplain "${prj_root}/src/static/*.vhd"]] {
         set_global_assignment -name VHDL_FILE "${file}"
     }
-    foreach file [glob -nocomplain "${prj_root}/src/*.vhd"] {
+    set table_files [lsort [glob -nocomplain "${prj_root}/src/*_tables.vhd"]]
+    set fsm_file "${prj_root}/src/${top_module}.vhd"
+    set wrapper_file "${prj_root}/src/${top_module}_wrapper.vhd"
+
+    foreach file $table_files {
         set_global_assignment -name VHDL_FILE "${file}"
+    }
+    foreach file [lsort [glob -nocomplain "${prj_root}/src/*.vhd"]] {
+        if { [lsearch -exact $table_files $file] < 0 && $file != $fsm_file && $file != $wrapper_file } {
+            set_global_assignment -name VHDL_FILE "${file}"
+        }
+    }
+    if { [file exists $fsm_file] } {
+        set_global_assignment -name VHDL_FILE "${fsm_file}"
+    }
+    if { [file exists $wrapper_file] } {
+        set_global_assignment -name VHDL_FILE "${wrapper_file}"
     }
 } else {
     foreach file [glob -nocomplain "${prj_root}/src/static/*.v"] {
@@ -37,15 +52,6 @@ if { "${source_type}" == "vhdl" } {
     foreach file [glob -nocomplain "${prj_root}/src/*.v"] {
         set_global_assignment -name VERILOG_FILE "${file}"
     }
-}
-
-foreach f [glob -nocomplain "${prj_root}/src/memfiles/*.mem"] {
-    file copy -force $f "${output_dir}/[file tail $f]"
-}
-set mems [glob -nocomplain "${output_dir}/*.mem"]
-
-foreach f $mems {
-    set_global_assignment -name MIF_FILE "${f}"
 }
 
 # Add SDC constraint file if it exists

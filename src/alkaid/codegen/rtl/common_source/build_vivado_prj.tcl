@@ -18,11 +18,26 @@ if { $source_type != "vhdl" && $source_type != "verilog" } {
 if { $source_type == "vhdl" } {
     set_property TARGET_LANGUAGE VHDL [current_project]
 
-    set static_files [glob -nocomplain "${prj_root}/src/static/*.vhd"]
-    set prj_files [glob -nocomplain "${prj_root}/src/*.vhd"]
-
-    foreach file "${prj_files} ${static_files}" {
+    foreach file [lsort [glob -nocomplain "${prj_root}/src/static/*.vhd"]] {
         read_vhdl -vhdl2008 $file
+    }
+    set table_files [lsort [glob -nocomplain "${prj_root}/src/*_tables.vhd"]]
+    set fsm_file "${prj_root}/src/${top_module}.vhd"
+    set wrapper_file "${prj_root}/src/${top_module}_wrapper.vhd"
+
+    foreach file $table_files {
+        read_vhdl -vhdl2008 $file
+    }
+    foreach file [lsort [glob -nocomplain "${prj_root}/src/*.vhd"]] {
+        if { [lsearch -exact $table_files $file] < 0 && $file != $fsm_file && $file != $wrapper_file } {
+            read_vhdl -vhdl2008 $file
+        }
+    }
+    if { [file exists $fsm_file] } {
+        read_vhdl -vhdl2008 $fsm_file
+    }
+    if { [file exists $wrapper_file] } {
+        read_vhdl -vhdl2008 $wrapper_file
     }
 
 } else {
@@ -33,25 +48,6 @@ if { $source_type == "vhdl" } {
 
     read_verilog $prj_files $static_files
 
-}
-
-
-set mems [glob -nocomplain "${prj_root}/src/memfiles/*.mem"]
-
-# VHDL only uses relative path to working dir apparently...
-if { $source_type == "vhdl" } {
-    foreach f $mems {
-        file copy -force $f [file tail $f]
-    }
-    set mems [glob -nocomplain "*.mem"]
-}
-
-if { [llength $mems] > 0 } {
-    add_files -fileset [current_fileset] $mems
-}
-
-foreach f $mems {
-    set_property used_in_synthesis true [get_files $f]
 }
 
 # Add XDC constraint if it exists
