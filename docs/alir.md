@@ -80,7 +80,7 @@ For non-input operations, every `addr` index must refer only to an earlier opera
   - `subop = 0`: AND.
   - `subop = 1`: OR.
   - `subop = 2`: XOR.
-- `11`: Variadic signed shifted sum.
+- `11`: Variadic signed shifted sum. Only N=3 can emit RTL currently.
   - `addr = (x0, x1, ..., xN)`, `data = (sign0, shift0, sign1, shift1, ..., signN, shiftN)`.
   - `N >= 1`; each `signK` is `1` for `+` and `0` for `-`.
   - `buf[i] = sum((+1 if signK else -1) * buf[xK] * 2^shiftK for K in range(N + 1))`
