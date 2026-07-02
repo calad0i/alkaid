@@ -83,14 +83,19 @@ def _assignments(src: Signal, dst: Signal) -> list[str]:
 
 def _conn_block(conn: Conn, indent: int) -> str:
     pad = ' ' * indent
-    lines = _assignments(conn.alt_src if conn.alt_src is not None else conn.src, conn.dst)
     src_lines = _assignments(conn.src, conn.dst)
 
-    if conn.enable_if is None or conn.alt_src is None:
+    if conn.enable_if is None:
         return '\n'.join(f'{pad}{line}' for line in src_lines)
 
     inner = ' ' * (indent + 4)
     src = '\n'.join(f'{inner}{line}' for line in src_lines)
+    if conn.alt_src is None:
+        return f"""{pad}if {_single_bit(conn.enable_if)} = '1' then
+{src}
+{pad}end if;"""
+
+    lines = _assignments(conn.alt_src, conn.dst)
     alt = '\n'.join(f'{inner}{line}' for line in lines)
     return f"""{pad}if {_single_bit(conn.enable_if)} = '1' then
 {src}
@@ -100,7 +105,7 @@ def _conn_block(conn: Conn, indent: int) -> str:
 
 
 def _conn_stmt(conn: Conn) -> str:
-    if conn.enable_if is None or conn.alt_src is None:
+    if conn.enable_if is None:
         return _conn_block(conn, 4)
     return f"""    process(all) begin
 {_conn_block(conn, 8)}

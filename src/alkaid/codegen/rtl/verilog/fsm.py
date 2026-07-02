@@ -96,6 +96,11 @@ def gen_assignments_conn(conn: Conn) -> str:
         {alt_assignments_str}
     end
 """
+    elif enable_sig_name is not None:
+        block = f"""    if ({enable_sig_name}) begin: _enabled_{conn.dst.name}
+        {assignments_str}
+    end
+"""
     else:
         block = assignments_str
 
@@ -103,7 +108,7 @@ def gen_assignments_conn(conn: Conn) -> str:
         if conn.dst.rst_if is not None and conn.dst.rst_to is not None:
             rst_sig = conn.dst.rst_if
             rst_sig_name = f'{rst_sig.name}[{rst_sig.view[0]}]' if rst_sig.raw.width > 1 else rst_sig.name
-            rst_val = _rst_bin(conn.dst)
+            rst_val = _rst_bin(conn.dst.raw)
             block = block.replace('\n', '\n    ')
             block = (
                 f'    if ({rst_sig_name}) begin: _reset_{conn.dst.name}\n'

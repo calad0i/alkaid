@@ -562,19 +562,20 @@ class FSMEmu:
         staged = staged if staged is not None else self.buffers
         if self._is_reset(conn.dst):
             return
-        if conn.enable_if is None:
-            src = self._eval_buf(conn.src.name)
-        else:
-            if conn.alt_src is None:
-                return  # no update
-            src0, src1 = self._eval_buf(conn.src.name), self._eval_buf(conn.alt_src.name)  # type: ignore
-            cond = self._eval_buf(conn.enable_if.name)[0]
-            src = src0 if cond else src1
-        if not self.buffers[conn.src.name]._changed:
+        src_sig = conn.src
+        if conn.enable_if is not None:
+            en = conn.enable_if
+            cond = self._eval_buf(en.name)[en.view[0] + self._get_bias(en)]
+            if not cond:
+                if conn.alt_src is None:
+                    return  # load-enable hold
+                src_sig = conn.alt_src
+        src = self._eval_buf(src_sig.name)
+        if not self.buffers[src_sig.name]._changed:
             return
         dst = staged[conn.dst.name]
-        _bias_src, _bias_dst = self._get_bias(conn.src), self._get_bias(conn.dst)
-        s_src = slice(conn.src.view[0] + _bias_src, conn.src.view[1] + _bias_src)
+        _bias_src, _bias_dst = self._get_bias(src_sig), self._get_bias(conn.dst)
+        s_src = slice(src_sig.view[0] + _bias_src, src_sig.view[1] + _bias_src)
         s_dst = slice(conn.dst.view[0] + _bias_dst, conn.dst.view[1] + _bias_dst)
         dst[s_dst] = src[s_src]
 
