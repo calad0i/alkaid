@@ -31,15 +31,6 @@ def canonicalize_msb_wraps(comb: CombLogic) -> CombLogic:
         if op.qint.step == step:
             ops[i] = Op(op.addr, op.opcode, (0,), op.qint, op.latency, op.cost)
             continue
-        if len(uses[i]) != 1:
-            continue
-        if uses[i][0] < 0:
-            continue
-        use = ops[uses[i][0]]
-        if use.opcode != 9 or use.data[0] != 0:
-            continue
-        ops[i] = Op(op.addr, op.opcode, (0,), QInterval(0.0, step, step), op.latency, op.cost)
-
     return CombLogic(
         comb.shape,
         comb.inp_shifts,
