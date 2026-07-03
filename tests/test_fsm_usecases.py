@@ -191,18 +191,16 @@ def test_iir_filter(temp_directory, rtl_flavor):
 
 
 def _counter_fsm():
-    """4-bit up counter: count <= rst ? 0 : (en ? count+1 : count); wraps mod 16."""
+    """4-bit up counter using the load-enable shorthand; wraps mod 16."""
     comb = _trace_comb([0], [4], [0], lambda x: quantize(x[0] + 1.0, 0, 4, 0))  # +1 mod 16
     sin, sout = _comb_io_signals('inc', comb)
     rst = Signal('rst', True, ((0, 1, 0),), reg=False, mode='r')  # active-high reset
     en = Signal('en', True, ((0, 1, 0),), reg=False, mode='r')
     count = Signal('count', False, ((0, 4, 0),), reg=True, mode='rw', rst_if=rst, rst_to=(0,))
-    count_fb = Signal('count_fb', False, ((0, 4, 0),), reg=False)  # mirror for the hold path
     y = Signal('y', True, ((0, 4, 0),), reg=False, mode='w')
     conns = (
         Conn(count, sin[0:1]),
-        Conn(count, count_fb),
-        Conn(sout, count, enable_if=en, alt_src=count_fb),  # count <= en ? count+1 : count
+        Conn(sout, count, enable_if=en),  # count <= count+1 when en, otherwise hold
         Conn(count, y),
     )
     return FSM({'inc': comb}, conns)
@@ -228,8 +226,8 @@ def test_counter(temp_directory, rtl_flavor):
 
 def _fifo_fsm(w=8, depth=4):
     """Circular FIFO: mem[wptr] <= din each cycle, wptr/rptr advance only on wr_en/rd_en,
-    dout = mem[rptr]. The enable-gated pointers reuse the mirror-and-mux load-enable
-    pattern; the memory uses dynamic-bias addressing."""
+    dout = mem[rptr]. The gated registers use the load-enable shorthand; the memory uses
+    dynamic-bias addressing."""
     a = (depth - 1).bit_length()
     word = (0, w, 0)
     inc = _trace_comb([0], [a], [0], lambda x: quantize(x[0] + 1.0, 0, a, 0))  # +1 mod depth
@@ -243,22 +241,15 @@ def _fifo_fsm(w=8, depth=4):
 
     wptr = Signal('wptr', False, ((0, a, 0),), reg=True, mode='rw', rst_to=(0,))
     rptr = Signal('rptr', False, ((0, a, 0),), reg=True, mode='rw', rst_to=(0,))
-    wptr_fb = Signal('wptr_fb', False, ((0, a, 0),), reg=False)
-    rptr_fb = Signal('rptr_fb', False, ((0, a, 0),), reg=False)
     mem_w = Signal('mem', False, (word,) * depth, reg=True, view=(0, 1), _dynamic_bias=(wptr, 1))
     mem_r = Signal('mem', False, (word,) * depth, reg=True, view=(0, 1), _dynamic_bias=(rptr, 1))
-    mem_at_w = Signal('mem', False, (word,) * depth, reg=True, view=(0, 1), _dynamic_bias=(wptr, 1))
-    mem_hold = Signal('mem_hold', False, (word,), reg=False)  # combinational mirror of mem[wptr]
 
     conns = (
-        Conn(mem_at_w, mem_hold),  # mem_hold = mem[wptr] (comb)
-        Conn(din, mem_w, enable_if=wr_en, alt_src=mem_hold),  # mem[wptr] <= wr_en ? din : mem[wptr]
+        Conn(din, mem_w, enable_if=wr_en),  # mem[wptr] <= din when wr_en, otherwise hold
         Conn(wptr, siw[0:1]),
-        Conn(wptr, wptr_fb),
-        Conn(sow, wptr, enable_if=wr_en, alt_src=wptr_fb),  # wptr advances only on wr_en
+        Conn(sow, wptr, enable_if=wr_en),  # wptr advances only on wr_en
         Conn(rptr, sir[0:1]),
-        Conn(rptr, rptr_fb),
-        Conn(sor, rptr, enable_if=rd_en, alt_src=rptr_fb),  # rptr advances only on rd_en
+        Conn(sor, rptr, enable_if=rd_en),  # rptr advances only on rd_en
         Conn(mem_r, dout),  # dout = mem[rptr] (comb, dynamic bias)
     )
     return FSM({'incw': inc, 'incr': inc}, conns)
@@ -288,6 +279,48 @@ def test_sync_fifo(temp_directory, rtl_flavor):
     np.testing.assert_array_equal(got['dout'][depth - 1 : 2 * depth - 1, 0], pushed)
 
 
+def _dynamic_reset_fsm(w=8, depth=4):
+    a = (depth - 1).bit_length()
+    word = (0, w, 0)
+    rst = Signal('rst', True, ((0, 1, 0),), reg=False, mode='r')
+    wr_en = Signal('wr_en', True, ((0, 1, 0),), reg=False, mode='r')
+    addr = Signal('addr', True, ((0, a, 0),), reg=False, mode='r')
+    din = Signal('din', True, (word,), reg=False, mode='r')
+    dout = Signal('dout', True, (word,), reg=False, mode='w')
+    mem_w = Signal(
+        'mem',
+        False,
+        (word,) * depth,
+        reg=True,
+        mode='rw',
+        rst_if=rst,
+        rst_to=(0,) * depth,
+        view=(0, 1),
+        _dynamic_bias=(addr, 1),
+    )
+    mem_r = Signal('mem', False, (word,) * depth, reg=True, mode='rw', view=(0, 1), _dynamic_bias=(addr, 1))
+    return FSM({}, (Conn(din, mem_w, enable_if=wr_en), Conn(mem_r, dout)))
+
+
+def test_dynamic_view_reset_load_enable(temp_directory, rtl_flavor):
+    fsm = _dynamic_reset_fsm()
+    data = {
+        'rst': np.array([1, 0, 0, 1], dtype=np.float64),
+        'wr_en': np.array([0, 1, 0, 0], dtype=np.float64),
+        'addr': np.array([0, 2, 2, 2], dtype=np.float64),
+        'din': np.array([0, 42, 0, 0], dtype=np.float64),
+    }
+    ref, got = _run_both(
+        fsm,
+        data,
+        'dyn_rst_top',
+        Path(temp_directory) / rtl_flavor / 'dyn_rst',
+        rtl_flavor,
+    )
+    np.testing.assert_array_equal(got['dout'], ref['dout'])
+    np.testing.assert_array_equal(got['dout'][:, 0], np.array([0, 42, 42, 0], dtype=np.float64))
+
+
 # ----------------------------------------------------------- 2x2 systolic array
 
 
@@ -308,6 +341,7 @@ def _systolic2x2_fsm():
 
     ar = [Signal(f'ar{i}', True, ((1, 7, 0),), reg=False, mode='r') for i in range(2)]
     bc = [Signal(f'bc{j}', True, ((1, 7, 0),), reg=False, mode='r') for j in range(2)]
+    en = Signal('en', True, ((0, 1, 0),), reg=False, mode='r')
     # Only the edge PEs forward operands: areg[i] passes A across row i, breg[j] passes B down col j.
     areg = [Signal(f'areg{i}', False, ((1, 7, 0),), reg=True, mode='rw', rst_to=(0,)) for i in range(2)]
     breg = [Signal(f'breg{j}', False, ((1, 7, 0),), reg=True, mode='rw', rst_to=(0,)) for j in range(2)]
@@ -320,12 +354,12 @@ def _systolic2x2_fsm():
     def b_in(i, j):
         return bc[j] if i == 0 else breg[j]  # row 0 from the top edge, else from the upper neighbor's register
 
-    conns = [Conn(ar[i], areg[i]) for i in range(2)] + [Conn(bc[j], breg[j]) for j in range(2)]
+    conns = [Conn(ar[i], areg[i], enable_if=en) for i in range(2)] + [Conn(bc[j], breg[j], enable_if=en) for j in range(2)]
     for i in range(2):
         for j in range(2):
             ai, bi = a_in(i, j), b_in(i, j)
             conns += [Conn(acc[i, j], sin[i, j][0:1]), Conn(ai, sin[i, j][1:2]), Conn(bi, sin[i, j][2:3])]
-            conns += [Conn(sout[i, j], acc[i, j]), Conn(acc[i, j], cout[i, j])]
+            conns += [Conn(sout[i, j], acc[i, j], enable_if=en), Conn(acc[i, j], cout[i, j])]
     return FSM(logic, tuple(conns))
 
 
@@ -336,13 +370,15 @@ def test_systolic_2x2(temp_directory, rtl_flavor):
     B = rng.integers(-8, 8, (2, 2)).astype(np.float64)
     z = 0.0
     # Standard skewed feed: row i of A enters left edge i cycles late; col j of B likewise.
-    data = {
+    base = {
         'ar0': np.array([A[0, 0], A[0, 1], z, z, z, z]),
         'ar1': np.array([z, A[1, 0], A[1, 1], z, z, z]),
         'bc0': np.array([B[0, 0], B[1, 0], z, z, z, z]),
         'bc1': np.array([z, B[0, 1], B[1, 1], z, z, z]),
     }
-    ref, got = _run_both(fsm, data, 'sys_top', Path(temp_directory) / rtl_flavor / 'sys', rtl_flavor, steps=6)
+    data = {name: np.insert(stream, 2, stream[2]) for name, stream in base.items()}
+    data['en'] = np.array([1, 1, 0, 1, 1, 1, 1], dtype=np.float64)
+    ref, got = _run_both(fsm, data, 'sys_top', Path(temp_directory) / rtl_flavor / 'sys', rtl_flavor, steps=7)
     for ij in [(0, 0), (0, 1), (1, 0), (1, 1)]:
         np.testing.assert_array_equal(got[f'c{ij[0]}{ij[1]}'], ref[f'c{ij[0]}{ij[1]}'])
     c_emu = np.array([[got[f'c{i}{j}'][-1, 0] for j in range(2)] for i in range(2)])
