@@ -22,7 +22,10 @@ def verilator_warn_suppression() -> str:
             RuntimeWarning,
             stacklevel=2,
         )
-    return '-Wno-ALWNEVER' if version >= 5.044 else ''
+    suppressions = ['-Wno-UNUSEDSIGNAL']
+    if version >= 5.044:
+        suppressions.append('-Wno-ALWNEVER')
+    return ' '.join(suppressions)
 
 
 def run_make_build(
