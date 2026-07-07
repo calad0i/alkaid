@@ -35,12 +35,6 @@ def gen_assignments(
         else:
             return f'{name_out} <= {name_inp};'
 
-    def _name(name: str, lo: int, hi: int, offset: str | None) -> str:
-        if offset is None:
-            return f'{name}[{hi - 1}:{lo}]'
-        start = f'{lo} + {offset}' if lo else offset
-        return f'{name}[{start} +: {hi - lo}]'
-
     assignments = []
     for (ii, ji), (io, jo) in map_out:
         _name_out = _name(name_out, io, jo, out_offset)
@@ -56,6 +50,13 @@ def gen_assignments(
     return assignments
 
 
+def _name(name: str, lo: int, hi: int, offset: str | None) -> str:
+    if offset is None:
+        return f'{name}[{hi - 1}:{lo}]'
+    start = f'{lo} + {offset}' if lo else offset
+    return f'{name}[{start} +: {hi - lo}]'
+
+
 def _bit_offset(sig: Signal) -> int:
     return sum(sum(p) for p in sig.raw.precisions[: sig.view[0]])
 
@@ -68,6 +69,34 @@ def _get_dyn_offset(sig: Signal) -> str | None:
     lo = _bit_offset(sig)
     hi = lo + sum(idx.bitwidths)
     return f'{idx.name}[{hi - 1}:{lo}] * {sig.jump_width}'
+
+
+def _mapped_bit_expr(map_out: list[BitMap], name_inp: str, dst_bit: int, inp_offset: str | None) -> str:
+    for (ii, ji), (io, jo) in map_out:
+        if not io <= dst_bit < jo:
+            continue
+        if ii == ji == -1:
+            return "1'b0"
+        if ji - ii == 1:
+            return _name(name_inp, ii, ji, inp_offset)
+        return _name(name_inp, ii + dst_bit - io, ii + dst_bit - io + 1, inp_offset)
+    raise AssertionError(f'No source bit mapped to destination bit {dst_bit}')
+
+
+def gen_mux_assignments_conn(conn: Conn, enable_sig_name: str, dst_off: str | None) -> list[str]:
+    assert conn.alt_src is not None
+    src_map, _ = gen_io_map(conn.src.precisions, conn.dst.precisions, True, _bit_offset(conn.src), _bit_offset(conn.dst))
+    alt_map, _ = gen_io_map(conn.alt_src.precisions, conn.dst.precisions, True, _bit_offset(conn.alt_src), _bit_offset(conn.dst))
+    src_off = _get_dyn_offset(conn.src)
+    alt_off = _get_dyn_offset(conn.alt_src)
+    dst_lo = _bit_offset(conn.dst)
+    assignments = []
+    for bit in range(dst_lo, dst_lo + conn.dst.width):
+        dst = _name(conn.dst.name, bit, bit + 1, dst_off)
+        src = _mapped_bit_expr(src_map, conn.src.name, bit, src_off)
+        alt = _mapped_bit_expr(alt_map, conn.alt_src.name, bit, alt_off)
+        assignments.append(f'assign {dst} = {enable_sig_name} ? {src} : {alt};')
+    return assignments
 
 
 def gen_assignments_conn(conn: Conn) -> str:
@@ -90,7 +119,10 @@ def gen_assignments_conn(conn: Conn) -> str:
         )
         alt_assignments_str = '\n        '.join(alt_assignments)
         assert enable_sig_name is not None
-        block = f"""    if ({enable_sig_name}) begin: _enabled_{conn.dst.name}
+        if not conn.clocked:
+            block = '\n        '.join(gen_mux_assignments_conn(conn, enable_sig_name, dst_off))
+        else:
+            block = f"""    if ({enable_sig_name}) begin: _enabled_{conn.dst.name}
         {assignments_str}
     end else begin: _alt_{conn.dst.name}
         {alt_assignments_str}

@@ -206,6 +206,23 @@ def _counter_fsm():
     return FSM({'inc': comb}, conns)
 
 
+def test_verilog_dynamic_alt_src_enable_lowers_to_continuous_mux(temp_directory):
+    a = Signal('a', True, ((0, 4, 0),), reg=False, mode='r')
+    b = Signal('b', True, ((0, 4, 0),), reg=False, mode='r')
+    sel = Signal('sel', True, ((0, 1, 0),), reg=False, mode='r')
+    y = Signal('y', True, ((0, 4, 0),), reg=False, mode='w')
+    fsm = FSM({}, (Conn(a, y, enable_if=sel, alt_src=b),))
+
+    path = Path(temp_directory) / 'verilog' / 'dynamic_alt_src_mux'
+    RTLModel(fsm, path, prj_name='dynamic_alt_src_mux', flavor='verilog').write()
+    top = (path / 'src' / 'dynamic_alt_src_mux.v').read_text()
+
+    assert 'if (sel) begin: _enabled_y' not in top
+    assert 'begin: _alt_y' not in top
+    assert 'assign y[0:0] = sel ? a[0:0] : b[0:0];' in top
+    assert 'assign y[3:3] = sel ? a[3:3] : b[3:3];' in top
+
+
 def test_counter(temp_directory, rtl_flavor):
     fsm = _counter_fsm()
     # Count up past the 4-bit wrap, hold while disabled, then synchronous reset (active-high).

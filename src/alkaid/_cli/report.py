@@ -183,6 +183,16 @@ def parse_if_exists(path: Path, parser_func: Callable[[str], T]) -> T | None:
     return parser_func(content)
 
 
+def parse_clock_period_constraint(path: Path, constraint_kind: str) -> float:
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if stripped == '' or stripped.startswith('#'):
+            continue
+        assert stripped.startswith('set clock_period '), f'Unexpected first constraint line in {constraint_kind} file: {line}'
+        return float(stripped.rsplit(' ', 1)[1].strip())
+    raise AssertionError(f'No clock_period constraint found in {constraint_kind} file: {path}')
+
+
 def parse_vitis_latency(csynth_xml_content: str) -> int:
     latencies = re.findall(r'<(?:Best|Average|Worst)-caseLatency>(\d+)</(?:Best|Average|Worst)-caseLatency>', csynth_xml_content)
     assert len(latencies) > 0 and len(latencies) % 3 == 0, 'Failed to parse latencies from Vitis report: ' + str(latencies)
@@ -224,9 +234,7 @@ def _load_project(path: str | Path) -> dict[str, Any]:
     if util is not None:
         d.update(util)
         if (path / f'src/{top_name}.xdc').exists():
-            line_one = (path / f'src/{top_name}.xdc').read_text().splitlines()[0]
-            assert line_one.startswith('set clock_period '), f'Unexpected first line in XDC file: {line_one}'
-            d['clock_period'] = float(line_one.rsplit(' ', 1)[1].strip())
+            d['clock_period'] = parse_clock_period_constraint(path / f'src/{top_name}.xdc', 'XDC')
     if timing is not None:
         d.update(timing)
         if 'latency' in d:  # pipelined logic
@@ -247,9 +255,7 @@ def _load_project(path: str | Path) -> dict[str, Any]:
     if util is not None:
         d.update(util)
         if (path / f'src/{top_name}.sdc').exists():
-            line_one = (path / f'src/{top_name}.sdc').read_text().splitlines()[0]
-            assert line_one.startswith('set clock_period '), f'Unexpected first line in SDC file: {line_one}'
-            d['clock_period'] = float(line_one.rsplit(' ', 1)[1].strip())
+            d['clock_period'] = parse_clock_period_constraint(path / f'src/{top_name}.sdc', 'SDC')
     d['path'] = str(path)
     return d
 
