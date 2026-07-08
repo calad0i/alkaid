@@ -12,7 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ...stateful import FSM, Signal
-from ...trace.passes import dead_code_elimin, fuse_ternary_adders
+from ...trace.passes import add_surrogate, dead_code_elimin, fuse_ternary_adders
 from ...trace.pipeline import to_pipeline
 from ...types import CombLogic, Precision
 from ._utils import canon_name, run_make_build, verilator_warn_suppression
@@ -262,7 +262,10 @@ class RTLModel:
 
         if isinstance(logic, CombLogic):
             autopipeline = n_stages > 0 or latency_cutoff > 0
-            comb = dead_code_elimin(fuse_ternary_adders(logic)) if ternary_fuse else logic
+            if ternary_fuse:
+                comb = add_surrogate(dead_code_elimin(fuse_ternary_adders(logic)), _skip_op8_cost=True)
+            else:
+                comb = logic
             self._comb = comb
             if autopipeline:
                 self.fsm = to_pipeline(

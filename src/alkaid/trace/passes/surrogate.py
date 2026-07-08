@@ -275,6 +275,8 @@ def cost_lat_op(
             # qint_out = op.qint
             assert lut is not None
             c, l = cost_lat_lut(qint_in, lut[op.data[0]], LUT_X, LUT_Y, skip_cost=_skip_op8_cost)
+            if _skip_op8_cost:
+                c = op.cost
         case 9:  # unary bitops: absorbed
             c, l = 0, 0
         case 10:  # bin bitops
