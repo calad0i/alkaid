@@ -35,26 +35,27 @@ def parse_utilization_vivado(utilization: str):
     Parse the utilization report and return a DataFrame with the results.
     """
     track = [
-        'DSPs',
-        'LUT as Logic',
-        'LUT as Memory',
-        'CLB Registers',
-        'CARRY8',
-        'Register as Latch',
-        'Register as Flip Flop',
-        'RAMB18',
-        'URAM',
-        'Block RAM Tile',
+        ('DSPs', r'DSPs'),
+        ('LUT as Logic', r'LUT\ as\ Logic'),
+        ('LUT as Memory', r'LUT\ as\ Memory'),
+        ('CLB Registers', r'CLB\ Registers'),
+        ('CARRY8', r'CARRY8'),
+        ('Register as Latch', r'Register\ as\ Latch'),
+        ('Register as Flip Flop', r'Register\ as\ Flip\ Flop'),
+        ('RAMB36', r'RAMB36/FIFO\*?'),
+        ('RAMB18', r'RAMB18'),
+        ('URAM', r'URAM'),
+        ('Block RAM Tile', r'Block\ RAM\ Tile'),
     ]
     matchers = []
-    for name in track:
+    for _, name_re in track:
         m = re.compile(
-            rf'\|\s*{name}\s*\|\s*(?P<Used>\d+)\s*\|\s*(?P<Fixed>\d+)\s*\|\s*(?P<Prohibited>\d+)\s*\|\s*(?P<Available>\d+)\s*\|\s*[<\d\.]+\s*\|\s*\n'
+            rf'\|\s*{name_re}\s*\|\s*(?P<Used>\d+)\s*\|\s*(?P<Fixed>\d+)\s*\|\s*(?P<Prohibited>\d+)\s*\|\s*(?P<Available>\d+)\s*\|\s*[<\d\.]+\s*\|\s*\n'
         )
         matchers.append(m)
 
     dd = {}
-    for name, m in zip(track, matchers):
+    for (name, _), m in zip(track, matchers):
         found = m.findall(utilization)
         if not found:
             print('Warning: regexp matching failed:')
@@ -71,6 +72,7 @@ def parse_utilization_vivado(utilization: str):
     dd['LUT_available'] = max(dd['LUT as Logic_available'], dd['LUT as Memory_available'])
     dd['FF_available'] = max(dd['Register as Flip Flop_available'], dd['Register as Latch_available'])
     dd['DSP'] = dd['DSPs']
+    dd['BRAM18_EQ'] = dd.get('RAMB18', 0) + 2 * dd.get('RAMB36', 0)
 
     return dd
 
@@ -350,6 +352,8 @@ def stdout_print(
         'LUT',
         'FF',
         'RAMB18',
+        'RAMB36',
+        'BRAM18_EQ',
         'comb_metric',
         'Fmax(MHz)',
         'latency(ns)',
