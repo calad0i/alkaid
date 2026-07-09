@@ -64,6 +64,30 @@ def test_report_vivado_utilization_counts_ramb36_equivalent():
     assert parsed['Block RAM Tile'] == 26
 
 
+def test_report_vivado_utilization_accepts_fractional_block_ram_tiles():
+    utilization = ''.join(
+        f'| {name} | {used} | 0 | 0 | 100 | 1 |\n'
+        for name, used in [
+            ('DSPs', 2),
+            ('LUT as Logic', 10),
+            ('LUT as Memory', 3),
+            ('CLB Registers', 7),
+            ('CARRY8', 4),
+            ('Register as Latch', 1),
+            ('Register as Flip Flop', 6),
+            ('RAMB36/FIFO*', 1),
+            ('RAMB18', 1),
+            ('URAM', 0),
+            ('Block RAM Tile', 1.5),
+        ]
+    )
+
+    parsed = parse_utilization_vivado(utilization)
+
+    assert parsed['Block RAM Tile'] == 1.5
+    assert parsed['BRAM18_EQ'] == 3
+
+
 @pytest.mark.parametrize(
     'config',
     [['vivado', -1], ['quartus', -1], ['vitis', -1], ['vivado', 2], ['quartus', 2]],
