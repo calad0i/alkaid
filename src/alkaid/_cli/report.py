@@ -49,7 +49,7 @@ def parse_utilization_vivado(utilization: str):
     matchers = []
     for name in track:
         m = re.compile(
-            rf'\|\s*{name}\s*\|\s*(?P<Used>\d+)\s*\|\s*(?P<Fixed>\d+)\s*\|\s*(?P<Prohibited>\d+)\s*\|\s*(?P<Available>\d+)\s*\|\s*[<\d\.]+\s*\|\s*\n'
+            rf'\|\s*{name}\s*\|\s*(?P<Used>\d+(?:\.\d+)?)\s*\|\s*(?P<Fixed>\d+)\s*\|\s*(?P<Prohibited>\d+)\s*\|\s*(?P<Available>\d+)\s*\|\s*[<\d\.]+\s*\|\s*\n'
         )
         matchers.append(m)
 
@@ -60,7 +60,7 @@ def parse_utilization_vivado(utilization: str):
             print('Warning: regexp matching failed:')
             print(m.pattern)
             continue
-        used, fixed, prohibited, available = map(int, found[0])
+        used, fixed, prohibited, available = map(lambda x: int(x) if '.' not in x else float(x), found[0])
         dd[name] = used
         dd[f'{name}_fixed'] = fixed
         dd[f'{name}_prohibited'] = prohibited
