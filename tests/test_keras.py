@@ -679,6 +679,11 @@ class TestCategoryEncoding:
         _run(layers.CategoryEncoding(num_tokens=V, output_mode=mode), [(4,)], kif=kif, hook_data=hook_data)
 
 
+class TestExpandDims:
+    def test(self):
+        _run(lambda x: ops.expand_dims(x, axis=1), [(8,)])
+
+
 def _run_embedding(V=6, D=4, shape=(3,)):
     kif = (0, 3, 0)
     inp = layers.Input(shape=shape)
