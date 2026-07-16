@@ -130,8 +130,10 @@ class ReplayRepeatVector(ReplayOperationBase):
     handles = (keras.layers.RepeatVector,)
 
     def call(self, inputs: FVArray) -> FVArray:
-        op: keras.layers.RepeatVector = self.op
-        return np.repeat(inputs, op.n, axis=0)  # type: ignore
+        assert inputs.ndim == 2, 'RepeatVector operation requires a 2D input'
+        input_shape = np.shape(inputs)
+        reshaped = np.reshape(inputs, (input_shape[0], 1, input_shape[1]))
+        return np.repeat(reshaped, self.op.n, axis=1)  # type: ignore
 
 
 class ReplayGetItem(ReplayOperationBase):
