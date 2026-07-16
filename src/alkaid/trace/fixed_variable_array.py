@@ -166,6 +166,8 @@ class FVArray(np.ndarray):
         self.hwconf = obj.hwconf
 
     def __array_function__(self, func, types, args, kwargs):
+        if func == np.shape:
+            return super().__array_function__(func, types, args, kwargs)
         if func in _ARRAY_FN:
             return _ARRAY_FN[func](*args, **kwargs)
         args, kwargs = to_raw_arr(args), to_raw_arr(kwargs)
