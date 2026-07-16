@@ -30,6 +30,7 @@ from keras.src.ops.numpy import (
     Einsum,
     Equal,
     Exp,
+    ExpandDims,
     Expm1,
     Floor,
     GetItem,
@@ -227,6 +228,14 @@ class ReplayTranspose(ReplayOperationBase):
     def call(self, x: FVArray) -> FVArray:
         axes = self.op.axes
         return np.transpose(x, axes)  # type: ignore
+
+
+class ReplayExpandDims(ReplayOperationBase):
+    handles = (ExpandDims,)
+
+    def call(self, x: FVArray) -> FVArray:
+        axis = self.op.axis
+        return np.expand_dims(x, axis)  # type: ignore
 
 
 class ReplayMoveaxis(ReplayOperationBase):
