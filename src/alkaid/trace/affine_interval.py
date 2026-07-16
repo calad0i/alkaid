@@ -33,7 +33,7 @@ class AffineInterval:
 
         if not self.coeffs:
             # Pure constant
-            step = 2.0 ** get_lsb_loc(min_val)
+            step = 2.0 ** get_lsb_loc(min_val) if min_val != 0.0 else 1.0
             return QInterval(min_val, max_val, step)
 
         step = 2.0 ** get_lsb_loc(self.bias)
@@ -48,7 +48,7 @@ class AffineInterval:
             step = min(step, 2.0 ** get_lsb_loc(coeff * atom.qint.step))
 
         if min_val == max_val:
-            step = 2.0 ** get_lsb_loc(min_val)
+            step = 2.0 ** get_lsb_loc(min_val) if min_val != 0.0 else 1.0
 
         return QInterval(min_val, max_val, step)
 
