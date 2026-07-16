@@ -674,6 +674,17 @@ for _t, _np in [
     _functional(_t)(_np)
 
 
+# tensor creations
+
+for _t, _np in [
+    (torch.empty_like, np.empty_like),
+    (torch.zeros_like, np.zeros_like),
+    (torch.ones_like, np.ones_like),
+    (torch.full_like, np.full_like),
+]:
+    _functional(_t)(_np)
+
+
 # Use Python operators for arithmetic so RetardedFVArray (from .apply) dispatches
 # through its own __mul__/__add__/etc. Numpy ufuncs would bypass that and lose the
 # delayed lookup-table operation.
@@ -816,3 +827,24 @@ def _replay_getattr(obj, name: str):
 
 
 _functional_map[getattr] = _replay_getattr
+
+
+# ---------------------------------------------------------------------------
+# Expose _functional_map as FVArray.__torch_function__ dispatch.
+# This enables the functional API: model(fvarray) works for any torch op
+# that is registered in _functional_map.
+# ---------------------------------------------------------------------------
+from alkaid.trace.fixed_variable_array import _register_torch_dispatch as _reg  # noqa: E402
+
+
+def _fvarray_torch_dispatch(func, args, kwargs):
+    if func in _functional_map:
+        # Strip torch-dtype kwargs — FVArray is always object dtype.
+        # produces None-filled arrays which FVArray.__new__ rejects.
+        clean_kw = {k: v for k, v in kwargs.items() if not isinstance(v, torch.dtype)}
+        return _functional_map[func](*args, **clean_kw)
+    return NotImplemented
+
+
+_reg(_fvarray_torch_dispatch)
+del _reg
