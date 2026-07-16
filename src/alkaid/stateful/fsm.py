@@ -461,6 +461,7 @@ class FSM:
             'fsm': {
                 'logic': dict(self.logic),
                 'conns': self.comb_conns + self.reg_conns,
+                'signal_order': list(self.signals),
             },
         }
 
@@ -473,7 +474,9 @@ class FSM:
 
         logic = {name: CombLogic.from_dict(cl, raw=True) for name, cl in d['logic'].items()}
         conns = tuple(Conn.from_dict(c) for c in d['conns'])
-        return cls(logic, conns, _sorted=True)
+        fsm = cls(logic, conns, _sorted=True)
+        fsm.signals = {name: fsm.signals[name] for name in d['signal_order']}
+        return fsm
 
     def save(self, path: str | Path, compresslevel: int = 6):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
