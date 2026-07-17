@@ -81,29 +81,91 @@ def mmm(mat0: np.ndarray, mat1: np.ndarray):
     return _vars.reshape(shape)
 
 
+def _sum(values):
+    values = list(values)
+    if not values:
+        return 0.0
+    return reduce(lambda a, b: a + b, np.asarray(values, dtype=object))
+
+
+def _binary_lut_groups(cm: np.ndarray, bit_mask: np.ndarray, group_size: int) -> list[list[np.ndarray]]:
+    groups = []
+    for col in cm.T:
+        active = np.flatnonzero(bit_mask & (col != 0.0))
+
+        def alignment(index):
+            weight = abs(float(col[index]))
+            msb = np.frexp(weight)[1] - 1
+            return msb, msb - get_lsb_loc(weight) + 1
+
+        active = np.asarray(sorted(active, key=alignment))
+        groups.append([active[start : start + group_size] for start in range(0, len(active) - group_size + 1, group_size)])
+    return groups
+
+
+def _cmvm_binary_lut(cm: np.ndarray, v_raw: np.ndarray, groups: list[list[np.ndarray]]) -> np.ndarray:
+    """Lower selected full-width groups into partial-sum LUTs."""
+    v_flat = v_raw.reshape(-1)
+    step = np.array([float(_v.step) for _v in v_flat], dtype=np.float64)
+
+    outputs = []
+    for j, output_groups in enumerate(groups):
+        col = cm[:, j].astype(np.float64)
+        group_terms = []
+        for group in output_groups:
+            powers = 2 ** np.arange(len(group))
+            codes = np.arange(2 ** len(group))[:, None]
+            address = _sum(
+                (v_flat[index] if step[index] == 1.0 else v_flat[index] * (1.0 / step[index])) * power
+                for index, power in zip(group, powers)
+            )
+            table = ((codes & powers) != 0) @ (col[group] * step[group])
+            group_terms.append(LookupTable(table).lookup(address, (0.0, float(table.size - 1), 1.0)))  # type: ignore
+        outputs.append(_sum(group_terms))
+    return np.asarray(outputs, dtype=object)
+
+
 def cmvm(cm: np.ndarray, v: 'FVArray', solver_options: solver_options_t) -> np.ndarray:
     offload_fn = solver_options.get('offload_fn', None)
     mask = offload_fn(cm, v) if offload_fn is not None else None
     v_raw = np.asarray(v)
+
     if mask is not None and np.any(mask):
         mask = np.astype(mask, np.bool_)
         assert mask.shape == cm.shape, f'Offload mask shape {mask.shape} does not match CM shape {cm.shape}'
         offload_cm = cm * mask.astype(cm.dtype)
         cm = cm * (~mask).astype(cm.dtype)
-        if np.all(cm == 0):
-            return mmm(v_raw, offload_cm)
     else:
         offload_cm = None
-    qintervals = [QInterval(float(_v.low), float(_v.high), float(_v.step)) for _v in v_raw]
-    latencies = [float(_v.latency) for _v in v_raw]
-    _mat = np.ascontiguousarray(cm.astype(np.float32))
-    solver_options = solver_options.copy()
-    solver_options.pop('offload_fn', None)
-    c0, c1 = cmvm_solve(_mat, qintervals=qintervals, latencies=latencies, **solver_options)  # type: ignore
-    _r: np.ndarray = c1(c0(v_raw, quantize=False), quantize=False)
+
+    parts = []
+    if solver_options.get('binary_lut', None) is not False:
+        bit_mask = np.array([sum(_v.kif) == 1 for _v in v_raw.ravel()])
+        if np.any(bit_mask):
+            groups = _binary_lut_groups(cm, bit_mask, int(solver_options.get('binary_lut_width', 6) or 6))
+            lut_mask = np.zeros(cm.shape, dtype=np.bool_)
+            for j, output_groups in enumerate(groups):
+                for group in output_groups:
+                    lut_mask[group, j] = True
+            if np.any(lut_mask):
+                lut_cm = cm * lut_mask
+                cm = cm * (~lut_mask)
+                parts.append(_cmvm_binary_lut(lut_cm, v_raw, groups))
+
+    if np.any(cm):
+        qintervals = [QInterval(float(_v.low), float(_v.high), float(_v.step)) for _v in v_raw]
+        latencies = [float(_v.latency) for _v in v_raw]
+        options = solver_options.copy()
+        options.pop('offload_fn', None)
+        options.pop('binary_lut', None)
+        options.pop('binary_lut_width', None)
+        c0, c1 = cmvm_solve(np.ascontiguousarray(cm.astype(np.float32)), qintervals=qintervals, latencies=latencies, **options)  # type: ignore
+        parts.append(c1(c0(v_raw, quantize=False), quantize=False))
     if offload_cm is not None:
-        _r = _r + mmm(v_raw, offload_cm)
-    return _r
+        parts.append(mmm(v_raw, offload_cm))
+    if not parts:
+        return np.zeros(cm.shape[1], dtype=object)
+    return np.sum(FVArray(np.array(parts)), axis=0)
 
 
 _unary_functions = (

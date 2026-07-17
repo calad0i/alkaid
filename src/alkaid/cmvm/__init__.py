@@ -18,6 +18,8 @@ class solver_options_t(TypedDict, total=False):
     decompose_dc: int
     adder_size: int
     search_all_decompose_dc: bool
+    binary_lut: bool | None
+    binary_lut_width: int
     offload_fn: None | Callable[[np.ndarray, 'FVArray'], np.ndarray]
     """
     Callable taking in (constant_matrix, fixed_variable_array) and returning
