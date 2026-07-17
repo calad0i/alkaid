@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 from collections.abc import Mapping, Sequence
+from copy import copy
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -277,7 +278,12 @@ class RTLModel:
             else:
                 self.fsm = to_pipeline(comb, n_stages=1, reg_inp=False, reg_out=False)
         else:
-            self.fsm = logic
+            if not ternary_fuse:
+                self.fsm = logic
+            else:
+                self.fsm = copy(logic)
+                for name, comb in self.fsm.logic.items():
+                    self.fsm.logic[name] = add_surrogate(dead_code_elimin(fuse_ternary_adders(comb)), _skip_op8_cost=True)
 
         _validate_period0_comb_only(self.fsm)
         self._signals = self.fsm.inp_signals + self.fsm.out_signals
