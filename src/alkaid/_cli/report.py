@@ -226,6 +226,8 @@ def _load_project(path: str | Path) -> dict[str, Any]:
         latency = parse_if_exists(path / f'output_{top_name}/test_ooc/syn/report/csynth.xml', parse_vitis_latency)
         if latency is not None:
             d['latency'] = latency
+    if 'latency_cycles' in d:
+        d['latency'] = d['latency_cycles']
 
     # Vivado reports
     util = parse_if_exists(rpt_path / f'{top_name}_post_route_util.rpt', parse_utilization_vivado)

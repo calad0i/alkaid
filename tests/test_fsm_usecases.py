@@ -351,6 +351,41 @@ def test_counter(temp_directory, rtl_flavor):
     np.testing.assert_array_equal(got['y'][:, 0], np.array(expected, dtype=np.float64))
 
 
+def test_soft_reset_follows_registered_reset_control(temp_directory):
+    _require_verilator()
+    identity = _trace_comb([0], [4], [0], lambda x: quantize(x[0], 0, 4, 0))
+    identity_in, identity_out = _comb_io_signals('identity', identity)
+    rst = Signal('rst', True, ((0, 1, 0),), reg=False, mode='r')
+    data = Signal('data', True, ((0, 4, 0),), reg=False, mode='r')
+    rst_q = Signal('rst_q', False, ((0, 1, 0),), reg=True, mode='rw', rst_to=(0,))
+    state = Signal('state', False, ((0, 4, 0),), reg=True, mode='rw', rst_if=rst_q, rst_to=(0,))
+    y = Signal('y', True, ((0, 4, 0),), reg=False, mode='w')
+    fsm = FSM(
+        {'identity': identity},
+        (Conn(rst, rst_q), Conn(data, identity_in), Conn(identity_out, state), Conn(state, y)),
+    )
+
+    path = Path(temp_directory) / 'verilog' / 'registered_reset_control'
+    model = RTLModel(fsm, path, prj_name='registered_reset_control', flavor='verilog')
+    model.compile(nproc=1)
+
+    config = (path / 'sim' / 'fsm_config.hh').read_text()
+    assert 'static constexpr size_t n_reset_signals = 1;' in config
+    assert 'static constexpr size_t reset_assert_cycles = 2;' in config
+
+    model.set_port('rst', 0)
+    model.set_port('data', 9)
+    model.eval()
+    model.tick()
+    model.eval()
+    assert model.get_port('y', scalar=True) == 9
+
+    model.soft_reset()
+    assert model.t == 0
+    assert model.get_port('rst', scalar=True) == 0
+    assert model.get_port('y', scalar=True) == 0
+
+
 # -------------------------------------------------------------------------- FIFO
 
 

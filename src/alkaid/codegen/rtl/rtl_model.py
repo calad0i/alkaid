@@ -150,12 +150,27 @@ def fsm_config_gen(fsm: FSM, module_name: str) -> str:
 
     reset_ids: list[int] = []
     seen_resets: set[str] = set()
+    reset_assert_cycles = 0
     for sig in fsm.signals.values():
         if not sig.reg or sig.rst_if is None:
             continue
         rst = sig.rst_if
         assert rst.size == 1 and rst.width == 1, f'Reset control {rst.name} must be a single bit'
-        assert rst.name in inp_names, f'Reset control {rst.name} must be an exposed input port'
+        assert_cycles = 1
+        seen_chain: set[str] = set()
+        while rst.name not in inp_names:
+            assert rst.name not in seen_chain, f'Cycle in reset-control chain at {rst.name}'
+            seen_chain.add(rst.name)
+            drivers = [conn for conn in fsm.comb_conns + fsm.reg_conns if conn.dst.name == rst.name and conn.dst.view == rst.view]
+            assert len(drivers) == 1, f'Internal reset control {rst.name} must have one direct driver'
+            driver = drivers[0]
+            assert driver.enable_if is None and driver.alt_src is None, (
+                f'Internal reset control {rst.name} must have an unconditional driver'
+            )
+            rst = driver.src
+            assert rst.size == 1 and rst.width == 1, f'Reset control {rst.name} must be a single bit'
+            assert_cycles += int(driver.clocked)
+        reset_assert_cycles = max(reset_assert_cycles, assert_cycles)
         if rst.name not in seen_resets:
             seen_resets.add(rst.name)
             reset_ids.append(name_to_id[rst.name])
@@ -212,6 +227,7 @@ struct fsm_config {{
     static constexpr size_t signal_sizes[] = {{{sizes_str}}};
 
     static constexpr size_t n_reset_signals = {len(reset_ids)};{reset_ids_decl}
+    static constexpr size_t reset_assert_cycles = {reset_assert_cycles};
 
 {sched_decls_str}    static constexpr fsm_schedule_config_t signal_schedules[] = {{
 {sched_entries_str}

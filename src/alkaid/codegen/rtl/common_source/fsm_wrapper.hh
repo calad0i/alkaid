@@ -110,7 +110,7 @@ void config_get_float_signal(typename config_t::dut_t *dut, size_t signal_id, do
     });
 }
 
-// Drive every reset-control port to `value` (1 = assert, 0 = deassert; active-high).
+// Drive every root reset-control port to `value` (1 = assert, 0 = deassert; active-high).
 template <typename config_t> void config_drive_reset(typename config_t::dut_t *dut, int64_t value) {
     for (size_t k = 0; k < config_t::n_reset_signals; ++k) {
         config_set_signal<config_t>(dut, config_t::reset_signal_ids[k], &value);
@@ -144,7 +144,10 @@ template <typename config_t> class FSMWrapper {
         if constexpr (config_t::n_reset_signals > 0) {
             config_drive_reset<config_t>(dut_.get(), 1);
             dut_->eval();
-            tick();
+            for (size_t cycle = 0; cycle < config_t::reset_assert_cycles; ++cycle) {
+                tick();
+                dut_->eval();
+            }
             config_drive_reset<config_t>(dut_.get(), 0);
         }
         if constexpr (has_clk) {
