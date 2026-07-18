@@ -66,7 +66,7 @@ def _get_dyn_offset(sig: Signal) -> str | None:
     if sig._dynamic_bias is None:
         return None
     idx = sig._dynamic_bias[0]
-    lo = _bit_offset(sig)
+    lo = _bit_offset(idx)
     hi = lo + sum(idx.bitwidths)
     return f'{idx.name}[{hi - 1}:{lo}] * {sig.jump_width}'
 
@@ -106,7 +106,7 @@ def gen_assignments_conn(conn: Conn) -> str:
     assignments_str = '\n        '.join(assignments)
     esig = conn.enable_if
     if esig is not None:
-        enable_sig_name = f'{esig.name}[{esig.view[0]}]' if esig.raw.width > 1 else esig.name
+        enable_sig_name = f'{esig.name}[{_bit_offset(esig)}]' if esig.raw.width > 1 else esig.name
     else:
         enable_sig_name = None
 
@@ -139,7 +139,7 @@ def gen_assignments_conn(conn: Conn) -> str:
     if conn.clocked:
         if conn.dst.rst_if is not None and conn.dst.rst_to is not None:
             rst_sig = conn.dst.rst_if
-            rst_sig_name = f'{rst_sig.name}[{rst_sig.view[0]}]' if rst_sig.raw.width > 1 else rst_sig.name
+            rst_sig_name = f'{rst_sig.name}[{_bit_offset(rst_sig)}]' if rst_sig.raw.width > 1 else rst_sig.name
             rst_val = _rst_bin(conn.dst.raw)
             block = block.replace('\n', '\n    ')
             block = (

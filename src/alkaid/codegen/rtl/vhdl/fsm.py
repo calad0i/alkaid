@@ -44,14 +44,14 @@ def _dyn_offset(sig: Signal) -> str | None:
     if sig._dynamic_bias is None:
         return None
     idx = sig._dynamic_bias[0]
-    lo = _bit_offset(sig)
+    lo = _bit_offset(idx)
     hi = lo + sum(idx.bitwidths)
     return f'to_integer(unsigned({_bits(idx.name, lo, hi)})) * {sig.jump_width}'
 
 
 def _single_bit(sig: Signal) -> str:
     assert sig.size == 1 and sig.width == 1
-    idx = sig.view[0] if sig.raw.width > 1 else 0
+    idx = _bit_offset(sig) if sig.raw.width > 1 else 0
     return f'{sig.name}({idx})'
 
 

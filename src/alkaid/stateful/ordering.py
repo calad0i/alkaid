@@ -13,11 +13,10 @@ def topo_check_and_sort(conns: Sequence[Conn]) -> list[Conn]:
     """Order combinational connections so that every read happens after its write.
 
     Each conn drives its ``dst`` view from up to three reads (``src``,
-    ``alt_src``, ``enable_if``); the bit range of each is taken straight from the
-    signal view (``view_interval``).  A conn must run after every conn that
-    drives a bit it reads, so the result is a topological order of the
-    read-after-write dependency graph.  The order within each disconnected
-    subgraph is preserved; subgraphs may interleave freely.
+    ``alt_src``, ``enable_if``), plus the index of every dynamically biased view.
+    A conn must run after every conn that drives an element it reads, so the
+    result is a topological order of the read-after-write dependency graph.  The
+    order within each disconnected subgraph is preserved; subgraphs may interleave freely.
 
     Dependencies are tracked at *interval* granularity rather than per signal, so
     e.g. ``A[0:10] = B`` together with ``B[10:20] = A`` is not a loop -- the bits
@@ -52,7 +51,7 @@ def topo_check_and_sort(conns: Sequence[Conn]) -> list[Conn]:
         return d
 
     for i, conn in enumerate(conns):
-        # a signal view's absolute bit range is exactly its view_interval
+        # Signal views are absolute element intervals.
         ws, we = conn.dst.view
         writes_by_signal.setdefault(conn.dst.name, []).append((ws, we, i))
         dkey, dnode = _node(conn.dst.name)
@@ -61,6 +60,11 @@ def topo_check_and_sort(conns: Sequence[Conn]) -> list[Conn]:
         src_reads: list[Signal] = [conn.src]
         if conn.alt_src is not None:
             src_reads.append(conn.alt_src)
+        if conn.enable_if is not None:
+            src_reads.append(conn.enable_if)
+        for sig in (conn.src, conn.dst, conn.enable_if, conn.alt_src):
+            if sig is not None and sig._dynamic_bias is not None:
+                src_reads.append(sig._dynamic_bias[0])
         for sig in src_reads:
             rs, re = sig.view
             rkey, rnode = _node(sig.name)

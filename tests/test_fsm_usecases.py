@@ -223,6 +223,119 @@ def test_verilog_dynamic_alt_src_enable_lowers_to_continuous_mux(temp_directory)
     assert 'assign y[3:3] = sel ? a[3:3] : b[3:3];' in top
 
 
+@pytest.mark.parametrize('flavor', ('verilog', 'vhdl'))
+def test_sliced_controls_use_packed_bit_offsets(temp_directory, flavor):
+    _require_hdl(flavor)
+    din = Signal('din', True, ((0, 8, 0),), reg=False, mode='r')
+    dout = Signal('dout', True, ((0, 8, 0),), reg=False, mode='w')
+    controls = Signal('controls', True, ((0, 4, 0), (0, 1, 0), (0, 2, 0)), reg=False, mode='r')
+    resets = Signal('resets', True, ((0, 4, 0), (0, 1, 0), (0, 2, 0)), reg=False, mode='r')
+    memory_write = Signal(
+        'memory',
+        False,
+        ((0, 8, 0),) * 4,
+        reg=True,
+        mode='rw',
+        rst_if=resets[1:2],
+        rst_to=(0,) * 4,
+        view=(0, 1),
+        _dynamic_bias=(controls[2:3], 1),
+    )
+    memory_read = Signal(
+        'memory',
+        False,
+        ((0, 8, 0),) * 4,
+        reg=True,
+        mode='rw',
+        view=(0, 1),
+        _dynamic_bias=(controls[2:3], 1),
+    )
+    fsm = FSM({}, (Conn(din, memory_write, enable_if=controls[1:2]), Conn(memory_read, dout)))
+
+    path = Path(temp_directory) / flavor / 'sliced_control_offsets'
+    model = RTLModel(fsm, path, prj_name='sliced_control_offsets', flavor=flavor)
+    model.write()
+    suffix = 'v' if flavor == 'verilog' else 'vhd'
+    top = (path / 'src' / f'sliced_control_offsets.{suffix}').read_text()
+
+    if flavor == 'verilog':
+        assert 'if (resets[4]) begin: _reset_memory' in top
+        assert 'if (controls[4]) begin: _enabled_memory' in top
+        assert 'memory[controls[6:5] * 8 +: 8] <= din[7:0];' in top
+        assert 'assign dout[7:0] = memory[controls[6:5] * 8 +: 8];' in top
+    else:
+        dynamic_offset = 'to_integer(unsigned(controls(6 downto 5))) * 8'
+        assert "if resets(4) = '1' then" in top
+        assert "if controls(4) = '1' then" in top
+        assert f'memory((({dynamic_offset}) + 7) downto ({dynamic_offset})) <= din(7 downto 0);' in top
+        assert f'dout(7 downto 0) <= memory((({dynamic_offset}) + 7) downto ({dynamic_offset}));' in top
+
+    data = {
+        'din': np.array([0, 42, 9, 7, 0], dtype=np.float64),
+        'controls': np.array([[0, 0, 0], [0, 1, 2], [0, 0, 2], [0, 1, 1], [0, 0, 2]], dtype=np.float64),
+        'resets': np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 1, 0]], dtype=np.float64),
+    }
+    ref, got = _run_both(fsm, data, 'sliced_control_offsets', path, flavor)
+    np.testing.assert_array_equal(got['dout'], ref['dout'])
+    np.testing.assert_array_equal(got['dout'][:, 0], np.array([0, 42, 42, 7, 0], dtype=np.float64))
+
+
+@pytest.mark.parametrize('consumer_first', (False, True))
+def test_computed_enable_ordering_is_connection_order_independent(consumer_first):
+    select = Signal('select', True, ((0, 1, 0),), reg=False, mode='r')
+    a = Signal('a', True, ((0, 8, 0),), reg=False, mode='r')
+    b = Signal('b', True, ((0, 8, 0),), reg=False, mode='r')
+    enable = Signal('enable', False, ((0, 1, 0),), reg=False, mode='rw')
+    y = Signal('y', True, ((0, 8, 0),), reg=False, mode='w')
+    producer = Conn(select, enable)
+    consumer = Conn(a, y, enable_if=enable, alt_src=b)
+    conns = (consumer, producer) if consumer_first else (producer, consumer)
+    emu = FSMEmu(FSM({}, conns))
+    emu.buffers['select'][:] = 1
+    emu.buffers['a'][:] = 42
+    emu.buffers['b'][:] = 7
+    emu.eval()
+
+    np.testing.assert_array_equal(emu.buffers['y'], np.array([42], dtype=np.float64))
+
+
+@pytest.mark.parametrize('consumer_first', (False, True))
+def test_computed_dynamic_bias_ordering_is_connection_order_independent(consumer_first):
+    src_index_in = Signal('src_index_in', True, ((0, 2, 0),), reg=False, mode='r')
+    dst_index_in = Signal('dst_index_in', True, ((0, 2, 0),), reg=False, mode='r')
+    src_index = Signal('src_index', False, ((0, 2, 0),), reg=False, mode='rw')
+    dst_index = Signal('dst_index', False, ((0, 2, 0),), reg=False, mode='rw')
+    source = Signal(
+        'source',
+        True,
+        ((0, 8, 0),) * 4,
+        reg=False,
+        mode='r',
+        view=(0, 1),
+        _dynamic_bias=(src_index, 1),
+    )
+    destination = Signal(
+        'destination',
+        False,
+        ((0, 8, 0),) * 4,
+        reg=False,
+        mode='rw',
+        view=(0, 1),
+        _dynamic_bias=(dst_index, 1),
+    )
+    producers = (Conn(src_index_in, src_index), Conn(dst_index_in, dst_index))
+    consumer = Conn(source, destination)
+    conns = (consumer, *producers) if consumer_first else (*producers, consumer)
+    emu = FSMEmu(FSM({}, conns))
+    emu.buffers['src_index_in'][:] = 2
+    emu.buffers['dst_index_in'][:] = 3
+    emu.buffers['source'][:] = (11, 22, 33, 44)
+    emu.buffers['destination'][:] = 0
+    emu.eval()
+
+    np.testing.assert_array_equal(emu.buffers['destination'], np.array([0, 0, 0, 33], dtype=np.float64))
+
+
 def test_counter(temp_directory, rtl_flavor):
     fsm = _counter_fsm()
     # Count up past the 4-bit wrap, hold while disabled, then synchronous reset (active-high).
