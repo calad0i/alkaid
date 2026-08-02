@@ -7,6 +7,7 @@ import numpy as np
 from alkaid.codegen import HLSModel, RTLModel
 from alkaid.converter import trace_model
 from alkaid.trace import HWConfig, trace
+from alkaid.trace.ops import quantize
 from alkaid.trace.passes import optimize
 from alkaid.types import CombLogic
 
@@ -133,7 +134,9 @@ def to_alkaid(
         return
 
     if model is not None:
-        data_in = [np.random.rand(n_test_sample, *inp.shape[1:]).astype(np.float32) * 64 - 32 for inp in model.inputs]
+        data_in = [np.random.rand(n_test_sample, *inp.shape[1:]).astype(np.float32) * 1024 - 512 for inp in model.inputs]
+        if inputs_kif is not None:
+            data_in = [quantize(_data_in, *inputs_kif) for _data_in in data_in]
         if len(data_in) == 1:
             data_in = data_in[0]
         y_keras = model.predict(data_in, batch_size=16384, verbose=0)  # type: ignore
