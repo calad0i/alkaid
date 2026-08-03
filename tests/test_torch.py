@@ -399,6 +399,25 @@ class TestBinaryOp:
         _run(op, [(8,), (8,)])
 
 
+class TestTensorCreation:
+    @pytest.fixture(
+        params=[
+            lambda x: x + torch.zeros_like(x),
+            lambda x: x + torch.ones_like(x),
+            lambda x: x + torch.full_like(x, 42),
+            lambda x: x + torch.ones(x.shape, dtype=torch.int32),
+            lambda x: x + torch.zeros(x.shape, dtype=torch.int32),
+            lambda x: x + torch.full(x.shape, 42, dtype=torch.int32),
+        ],
+        ids=['zeros_like', 'ones_like', 'full_like', 'ones', 'zeros', 'full'],
+    )
+    def op(self, request):
+        return request.param
+
+    def test(self, op):
+        _run(op, [(8,)])
+
+
 class TestBitwiseOp:
     @pytest.fixture(
         params=[

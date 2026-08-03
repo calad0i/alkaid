@@ -42,6 +42,13 @@ def _strip_ignored_kwargs(fn: Callable) -> Callable:
     def wrapper(*args, **kwargs):
         for k in _IGNORED_KWARGS:
             kwargs.pop(k, None)
+        dtype = kwargs.pop('dtype', None)
+        if dtype is not None:
+            dtype_str = str(dtype).rsplit('.', 1)[1].lower()
+            np_dtype = getattr(np, dtype_str, getattr(np, dtype_str + '_', None))
+            if np_dtype is None:
+                raise ValueError(f'Unsupported dtype: {dtype_str}')
+            kwargs['dtype'] = np_dtype
         return fn(*args, **kwargs)
 
     return wrapper
@@ -761,6 +768,19 @@ def replay_sort(input, dim: int = -1, descending: bool = False, stable: bool = F
     if descending:
         out = np.flip(out, axis=dim)
     return out
+
+
+# Array creation
+
+for _t, _np in [
+    (torch.zeros, np.zeros),
+    (torch.ones, np.ones),
+    (torch.full, np.full),
+    (torch.full_like, lambda input, fill_value, dtype=np.float32, **kwargs: np.full_like(input, fill_value, dtype=dtype)),
+    (torch.ones_like, lambda input, dtype=np.float32, **kwargs: np.ones_like(input, dtype=dtype)),
+    (torch.zeros_like, lambda input, dtype=np.float32, **kwargs: np.zeros_like(input, dtype=dtype)),
+]:
+    _functional(_t)(_np)
 
 
 # Activations exposed via torch.nn.functional that take shape-specific kwargs
