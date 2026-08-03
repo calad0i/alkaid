@@ -935,3 +935,10 @@ def _np_round(a: FVArray, decimals=0, **kw):
     _k, _i, _ = a.kif
     _i = np.maximum(_i + 1, 1)
     return a.quantize(_k, _i, 0, round_mode='RND_CONV')
+
+
+@_array_fn(np.ones_like, np.zeros_like, np.full_like, np.empty_like)
+def _something_like(a, *args, **kwargs):
+    raise ValueError(
+        'np.*_like is disabled for FVArray. In general, use raw `np.ndarray` with native machine types (e.g., f32/i32) for constants arrays, since known constant values collapses the interval information of FVArray, which may lead to unexpected results.'
+    )
