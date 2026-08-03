@@ -230,6 +230,10 @@ class FVArray(np.ndarray):
     def __array_function__(self, func, types, args, kwargs):
         if func == np.shape:
             return super().__array_function__(func, types, args, kwargs)
+        if func in (np.ones_like, np.zeros_like, np.full_like):
+            assert 'dtype' in kwargs, f'{func} requires dtype argument for FVArray'
+            args, kwargs = to_raw_arr(args), to_raw_arr(kwargs)
+            return func(*args, **kwargs)
         if func in _ARRAY_FN:
             return _ARRAY_FN[func](*args, **kwargs)
         args, kwargs = to_raw_arr(args), to_raw_arr(kwargs)
@@ -937,8 +941,9 @@ def _np_round(a: FVArray, decimals=0, **kw):
     return a.quantize(_k, _i, 0, round_mode='RND_CONV')
 
 
-@_array_fn(np.ones_like, np.zeros_like, np.full_like, np.empty_like)
-def _something_like(a, *args, **kwargs):
+@_array_fn(np.empty_like)
+def _empty_like(a, *args, **kwargs):
     raise ValueError(
-        'np.*_like is disabled for FVArray. In general, use raw `np.ndarray` with native machine types (e.g., f32/i32) for constants arrays, since known constant values collapses the interval information of FVArray, which may lead to unexpected results.'
+        'np.empty_like is not semanticly meaningful for FVArray.'
+        'Use FVArray.new(shape, hwconf) if you want to create a new FVArray with the same shape and hardware configuration.'
     )
