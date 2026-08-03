@@ -49,7 +49,7 @@ Index
    install.md
    getting_started.md
    alir.md
-   cmvm.md
+   optimization/index.md
    plugin.md
    faq.md
 

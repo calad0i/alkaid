@@ -18,7 +18,7 @@ w = np.random.randint(-2**7, 2**7, (4, 5, 6)) / 2**7
 
 def operation(inp):
    inp = quantize(inp, 1, 7, 0) # Input must be quantized before any non-trivial operation
-   out1 = relu(inp) # Only activation supported for now; can attach quantization at the same time
+   out1 = relu(inp) # ReLU can attach output quantization at the same time
 
    # many native numpy operations are supported
    out2 = inp[:, 1:3].transpose()
@@ -34,7 +34,7 @@ def operation(inp):
 inp = FVArrayInput((4, 5))
 out = operation(inp)
 
-# Generate pipelined Verilog code form the traced operation
+# Generate pipelined Verilog code from the traced operation
 # flavor can be 'verilog' or 'vhdl'. VHDL code generated will be in 2008 standard.
 comb = trace(inp, out)
 rtl_model = RTLModel(comb, '/tmp/rtl', flavor='verilog', latency_cutoff=5)
