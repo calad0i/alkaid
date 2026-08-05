@@ -239,7 +239,7 @@ def _load_project(path: str | Path) -> dict[str, Any]:
             d['clock_period'] = parse_clock_period_constraint(path / f'src/{top_name}.xdc', 'XDC')
     if timing is not None:
         d.update(timing)
-        if 'latency' in d:  # pipelined logic
+        if 'latency' in d and d['WNS(ns)']:
             d['actual_period'] = d['clock_period'] - d['WNS(ns)']
             d['Fmax(MHz)'] = 1000.0 / d['actual_period']
             d['latency(ns)'] = d['latency'] * d['actual_period']
