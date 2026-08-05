@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 from alkaid.codegen.hls.hls_codegen import get_io_types, hls_logic_and_bridge_gen
 from alkaid.types import CombLogic
 
-from ...trace.passes import dead_code_elimin, fuse_ternary_adders
+from ...trace.passes import add_surrogate, dead_code_elimin, fuse_ternary_adders
 from .. import hls
 from ..rtl._utils import canon_name
 
@@ -40,10 +40,10 @@ class HLSModel:
         io_delay_minmax: tuple[float, float] = (0.2, 0.4),
         namespace: str = 'comb_logic',
         inline_header: bool = True,
-        ternary_fuse: bool = True,
+        ternary_fuse: bool = False,
     ):
         if ternary_fuse:
-            comb_logic = dead_code_elimin(fuse_ternary_adders(comb_logic))
+            comb_logic = add_surrogate(dead_code_elimin(fuse_ternary_adders(comb_logic)))
         self._comb = comb_logic
         self._path = Path(path).resolve()
         self._prj_name = prj_name or canon_name(self._path.stem)
@@ -59,10 +59,6 @@ class HLSModel:
         self._uuid = None
         self._namespace = namespace
         self._inline_static_header = inline_header
-
-        print('===========================')
-        print(self._path.stem)
-        print(canon_name(self._path.stem))
 
         if pragma is None:
             if self._flavor == 'vitis':

@@ -292,7 +292,7 @@ class RTLModel:
                     verbose=False,
                 )
             else:
-                self.fsm = to_pipeline(comb, n_stages=1, reg_inp=False, reg_out=False)
+                self.fsm = to_pipeline(comb, n_stages=1, reg_inp=False, reg_out=False, verbose=False)
         else:
             if not ternary_fuse:
                 self.fsm = logic
