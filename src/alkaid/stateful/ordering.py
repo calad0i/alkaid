@@ -34,7 +34,7 @@ def topo_check_and_sort(conns: Sequence[Conn]) -> list[Conn]:
     def _node(name: str) -> tuple[str, bool]:
         if name.startswith('INTERNAL_'):
             base, sep, port = name.rpartition('_')
-            if sep and port in ('in', 'out'):
+            if sep and port in ('inp', 'outp'):
                 return base, True
         return name, False
 
