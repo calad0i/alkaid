@@ -248,6 +248,7 @@ class FVArray(np.ndarray):
             raise NotImplementedError(f'Unsupported ufunc.reduce: {ufunc}')
         assert method == '__call__', f'Only __call__ and reduce methods are supported for ufuncs, got {method}'
         if ufunc in _UFUNC:
+            kwargs.pop('out', None)
             return _UFUNC[ufunc](self, ufunc, *inputs, **kwargs)
         if ufunc in _unary_functions:
             assert len(inputs) == 1 and inputs[0] is self
@@ -742,7 +743,7 @@ def _np_count_nonzero(a, axis=None, keepdims=False):
 
 @_ufunc(np.add, np.subtract, np.multiply, np.true_divide, np.negative)
 def _ufunc_elementwise(arr: FVArray, ufunc, *inputs, **kwargs):
-    return FVArray(ufunc(*[to_raw_arr(x) for x in inputs], **kwargs), arr.solver_options, hwconf=arr.hwconf)
+    return FVArray(ufunc(*(to_raw_arr(x) for x in inputs), **kwargs), arr.solver_options, hwconf=arr.hwconf)
 
 
 @_ufunc(np.maximum, np.minimum)
