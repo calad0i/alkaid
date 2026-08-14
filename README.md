@@ -40,4 +40,4 @@ See the [documentation](https://calad0i.github.io/alkaid/) for tracing, plugin, 
 
 ## License
 
-LGPLv3. See the [LICENSE](LICENSE) file for details.
+This project is licensed under LGPLv3. See the [LICENSE](LICENSE) file for details. Separately, all files under `src/alkaid/_binary/alir` are dual licensed under [APACHE 2.0](src/alkaid/_binary/alir/LICENSE).
