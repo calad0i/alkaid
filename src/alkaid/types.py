@@ -354,7 +354,7 @@ class CombLogic(NamedTuple):
                 _qint1 = self.ops[op.addr[1]].qint
                 s = 2.0**shift
                 qint1 = QInterval(_qint1.min * s, _qint1.max * s, _qint1.step * s)
-                ret = binary_bit_op(v0, v1 * s, _opcode, self.ops[op.addr[0]].qint, qint1, op.qint)
+                ret = binary_bit_op(v0, v1 * s, _opcode, self.ops[op.addr[0]].qint, qint1)
             case _:
                 raise ValueError(f'Unknown opcode {op.opcode} in {op}')
         return ret

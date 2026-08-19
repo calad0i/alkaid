@@ -181,14 +181,13 @@ class LookupTable:
         return hash(self.spec.hash)
 
 
-def _binary_bit_op(a: float, b: float, op: int, qint0: QInterval, qint1: QInterval, qint: QInterval):
+def _binary_bit_op(a: float, b: float, op: int, qint0: QInterval, qint1: QInterval):
     _fn = {0: lambda x, y: x & y, 1: lambda x, y: x | y, 2: lambda x, y: x ^ y}[op]
     assert isinstance(a, float) and isinstance(b, float)
-    assert qint0 is not None and qint1 is not None and qint is not None
-    k, i, f = qint.kif
+    assert qint0 is not None and qint1 is not None
     step = min(qint0.step, qint1.step)
     _a, _b = round(a / step), round(b / step)
-    return interpret_as(_fn(_a, _b), k, i, f)
+    return _fn(_a, _b) * step
 
 
 def _unary_bit_op(a: float, op: int, qint_from: QInterval, qint_to: QInterval | None = None) -> float:
@@ -904,6 +903,8 @@ class FVariable:
 
         _data = ops[_type]
         if _type == 'not':
+            if self.opr == 'const':
+                return ~round(self.low / self.step) * self.step
             if self.opr == 'bit_unary' and self._data == 0:
                 return self._from[0] * (self._factor / self._from[0]._factor)
             k, i, f = self.kif
@@ -949,12 +950,22 @@ class FVariable:
         if self.opr == 'const' and other.opr == 'const':
             qint0 = QInterval(float(self.low), float(self.high), float(self.step))
             qint1 = QInterval(float(other.low), float(other.high), float(other.step))
-            v = _binary_bit_op(float(self.low), float(other.low), ops[_type], qint0, qint1, qint)
+            v = _binary_bit_op(float(self.low), float(other.low), ops[_type], qint0, qint1)
             return self.from_const(v, hwconf=self.hwconf)
         if self.opr == 'const' and other.opr != 'const':
             return other.binary_bit_op(self, _type)
 
         if other.opr == 'const':
+            if self.opr == 'const':
+                step = min(self.step, other.step)
+                self_int, other_int = round(self.low / step), round(other.low / step)
+                match _type:
+                    case 'and':
+                        return self.from_const(float(self_int & other_int) * step, hwconf=self.hwconf)
+                    case 'or':
+                        return self.from_const(float(self_int | other_int) * step, hwconf=self.hwconf)
+                    case 'xor':
+                        return self.from_const(float(self_int ^ other_int) * step, hwconf=self.hwconf)
             if other.low == 0:  # 0
                 if _type == 'and':
                     return other

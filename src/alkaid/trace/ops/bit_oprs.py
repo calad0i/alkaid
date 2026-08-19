@@ -15,15 +15,13 @@ def binary_bit_op(a: FVariable, b: FVariable, op: int, *args, **kwargs) -> FVari
 def binary_bit_op(a: float, b: float, op: int, qint0: QInterval, qint1: QInterval) -> float: ...
 
 
-def binary_bit_op(
-    a: T, b: T, op: int, qint0: QInterval | None = None, qint1: QInterval | None = None, qint: QInterval | None = None
-) -> T:
+def binary_bit_op(a: T, b: T, op: int, qint0: QInterval | None = None, qint1: QInterval | None = None) -> T:
     _fn = {0: lambda x, y: x & y, 1: lambda x, y: x | y, 2: lambda x, y: x ^ y}[op]
     if isinstance(a, FVariable) or isinstance(b, FVariable):
         return _fn(a, b)
     assert isinstance(a, float) and isinstance(b, float), f'{type(a)} {type(b)}'
-    assert qint0 is not None and qint1 is not None and qint is not None
-    return _binary_bit_op(a, b, op, qint0, qint1, qint)
+    assert qint0 is not None and qint1 is not None
+    return _binary_bit_op(a, b, op, qint0, qint1)
 
 
 def unary_bit_op(a: T, op: int, qint_from: QInterval, qint_to: QInterval) -> T:
