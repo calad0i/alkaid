@@ -379,8 +379,11 @@ def stdout_print(
 def report_main(args):
     _vals = [load_project(Path(p)) for p in args.paths]
     vals = [v for v in _vals if v is not None]
-    for path, val in zip(args.paths, vals):
+    for path, val in zip(args.paths, _vals):
+        if val is None:
+            continue
         d = extra_info_from_fname(Path(path).name)
+        print(val, d)
         for k, v in d.items():
             val.setdefault(k, v)
 
