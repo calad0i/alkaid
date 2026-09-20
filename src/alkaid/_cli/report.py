@@ -383,7 +383,6 @@ def report_main(args):
         if val is None:
             continue
         d = extra_info_from_fname(Path(path).name)
-        print(val, d)
         for k, v in d.items():
             val.setdefault(k, v)
 
