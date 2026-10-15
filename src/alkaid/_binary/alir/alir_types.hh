@@ -188,7 +188,9 @@ namespace alir {
     static_assert(std::is_trivial_v<Op>);
 
     // W >= 1 guaranteed by validate(); W == 64 handled by the ternary.
-    inline int64_t mask_from(uint8_t W) { return (W == 64) ? ~int64_t(0) : ((int64_t(1) << W) - 1); }
-    inline int64_t sign_from(uint8_t W) { return int64_t(1) << (W - 1); }
+    inline int64_t mask_from(uint8_t W) {
+        return (W == 64) ? ~int64_t(0) : static_cast<int64_t>((uint64_t(1) << W) - 1);
+    }
+    inline int64_t sign_from(uint8_t W) { return static_cast<int64_t>(uint64_t(1) << (W - 1)); }
 
 } // namespace alir

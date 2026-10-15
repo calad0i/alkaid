@@ -263,7 +263,7 @@ NB_MODULE(cmvm_bin, m) {
     m.def("int_arr_to_csd", &int_arr_to_csd_numpy, "inp"_a.noconvert());
     m.def("get_lsb_loc", &get_lsb_loc, "x"_a);
     m.def("get_lsb_loc_arr", &get_lsb_loc_arr, "x"_a);
-    m.def("iceil_log2", &iceil_log2, "x"_a);
+    m.def("iceil_log2", static_cast<int16_t (*)(double)>(&iceil_log2), "x"_a);
     m.def("minimal_kif_scalar", &minimal_kif_scalar_numpy, "qmin"_a, "qmax"_a, "qstep"_a);
     m.def(
         "minimal_kif_batch",

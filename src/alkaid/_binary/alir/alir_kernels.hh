@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 namespace alir {
     namespace {
@@ -16,29 +17,40 @@ namespace alir {
                 out[s] = -in0[s];
         }
 
-        template <int B>
+        template <int B, typename T>
         inline void op_input(
             int64_t *out,
-            const double *inputs,
+            const T *inputs,
             size_t n_in,
             uint32_t input_idx,
             double scale,
+            int32_t shift,
             int64_t mask,
             int64_t sign_bit,
             bool out_signed,
             size_t batch_size
         ) {
-            for (size_t s = 0; s < batch_size; ++s) {
-                double f = inputs[s * n_in + input_idx] * scale;
-                int64_t iv = static_cast<int64_t>(std::floor(f));
+            for (size_t s = 0; s < B; ++s) {
+                if (s >= batch_size) {
+                    out[s] = 0;
+                    continue;
+                }
+                int64_t iv;
+                if constexpr (std::is_same_v<T, int64_t>) {
+                    iv = inputs[s * n_in + input_idx];
+                    if (shift != 0)
+                        iv = shift > 0 ? iv << shift : iv >> -shift;
+                }
+                else {
+                    double f = inputs[s * n_in + input_idx] * scale;
+                    iv = static_cast<int64_t>(f); // floor but int arith
+                    iv -= static_cast<double>(iv) > f;
+                }
                 int64_t u = iv & mask;
                 if (out_signed)
                     u = (u ^ sign_bit) - sign_bit;
                 out[s] = u;
             }
-            // reminder when batch_size < B
-            for (size_t s = batch_size; s < B; ++s)
-                out[s] = 0;
         }
 
         template <int B, bool SUB>

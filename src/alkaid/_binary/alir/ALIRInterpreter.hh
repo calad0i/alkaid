@@ -38,7 +38,8 @@ namespace alir {
             const std::vector<DType> &dtypes
         );
 
-        template <int B> void exec_batch_core(const double *inputs, size_t batch_size, int64_t *buffer) const;
+        template <int B, typename T>
+        void exec_batch_core(const T *inputs, size_t batch_size, int64_t *buffer) const;
 
       public:
         static const int alir_version = 4;
@@ -54,6 +55,11 @@ namespace alir {
         // buffer must be n_slots * B int64s.
         template <int B>
         void exec_batch(const double *inputs, double *outputs, size_t batch_size, int64_t *buffer) const;
+
+        // Integer ports carry words on their own fixed-point grids; arithmetic slots keep the same
+        // representation.
+        template <int B>
+        void exec_batch(const int64_t *inputs, int64_t *outputs, size_t batch_size, int64_t *buffer) const;
 
         // (batch_size, n_ops) per-op scaled decimals, for debug cross-check.
         template <int B>

@@ -3,8 +3,8 @@
 
 namespace alir {
 
-    template <int B>
-    void ALIRInterpreter::exec_batch_core(const double *inputs, size_t batch_size, int64_t *buffer) const {
+    template <int B, typename T>
+    void ALIRInterpreter::exec_batch_core(const T *inputs, size_t batch_size, int64_t *buffer) const {
         const Op *ops_ptr = ops.data();
         const double *scales_ptr = input_scales.data();
         const size_t nin = n_in;
@@ -26,6 +26,7 @@ namespace alir {
                     nin,
                     _op.input_idx,
                     scales_ptr[i],
+                    inp_shifts[_op.input_idx],
                     mask_from(_op.h.w_out),
                     sign_from(_op.h.w_out),
                     (_op.h.flags & 0x1) != 0,
@@ -208,6 +209,30 @@ namespace alir {
     }
 
     template <int B>
+    void ALIRInterpreter::exec_batch(
+        const int64_t *inputs,
+        int64_t *outputs,
+        size_t batch_size,
+        int64_t *buffer
+    ) const {
+        exec_batch_core<B>(inputs, batch_size, buffer);
+        const size_t nout = n_out;
+        for (size_t j = 0; j < nout; ++j) {
+            const int32_t slot = out_idxs_slot[j];
+            if (slot < 0) {
+                for (size_t s = 0; s < batch_size; ++s)
+                    outputs[s * nout + j] = 0;
+                continue;
+            }
+            const int64_t *input = buffer + (size_t)slot * B;
+            const bool neg = out_negs[j] != 0;
+            for (size_t s = 0; s < batch_size; ++s) {
+                outputs[s * nout + j] = neg ? -input[s] : input[s];
+            }
+        }
+    }
+
+    template <int B>
     void ALIRInterpreter::dump_batch(
         const double *inputs,
         double *dump_outputs,
@@ -231,6 +256,11 @@ namespace alir {
     template void ALIRInterpreter::exec_batch<4>(const double *, double *, size_t, int64_t *) const;
     template void ALIRInterpreter::exec_batch<8>(const double *, double *, size_t, int64_t *) const;
     template void ALIRInterpreter::exec_batch<16>(const double *, double *, size_t, int64_t *) const;
+    template void ALIRInterpreter::exec_batch<1>(const int64_t *, int64_t *, size_t, int64_t *) const;
+    template void ALIRInterpreter::exec_batch<4>(const int64_t *, int64_t *, size_t, int64_t *) const;
+    template void ALIRInterpreter::exec_batch<8>(const int64_t *, int64_t *, size_t, int64_t *) const;
+    template void ALIRInterpreter::exec_batch<16>(const int64_t *, int64_t *, size_t, int64_t *) const;
+    template void ALIRInterpreter::exec_batch<64>(const int64_t *, int64_t *, size_t, int64_t *) const;
     template void ALIRInterpreter::dump_batch<1>(const double *, double *, size_t, int64_t *) const;
     template void ALIRInterpreter::dump_batch<4>(const double *, double *, size_t, int64_t *) const;
     template void ALIRInterpreter::dump_batch<8>(const double *, double *, size_t, int64_t *) const;

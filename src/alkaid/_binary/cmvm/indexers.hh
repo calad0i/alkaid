@@ -9,15 +9,21 @@ overlap_counts(const QInterval &q0, const QInterval &q1, const int8_t shift1);
 Pair idx_wmc(const DAState &state);
 Pair idx_wmc_dc(const DAState &state, bool absolute = false);
 
-inline int8_t iceil_log2(float x) {
+inline int16_t iceil_log2(float x) {
     uint32_t bits = std::bit_cast<uint32_t>(x);
     uint8_t exp = static_cast<uint8_t>((bits >> 23) & 0xFF);
     uint32_t mant = bits & 0x7FFFFF;
-    return static_cast<int8_t>(exp - 127 + (mant != 0));
+    return static_cast<int16_t>(exp - 127 + (mant != 0));
 }
 
-// Scalar minimal_kif. Uses llrint (FE_TONEAREST) to match Python's round().
-// The float32 cast in iceil_log2 is load-bearing — see iceil_log2 above.
+inline int16_t iceil_log2(double x) {
+    uint64_t bits = std::bit_cast<uint64_t>(x);
+    uint16_t exp = static_cast<uint16_t>((bits >> 52) & 0x7FF);
+    uint64_t mant = bits & 0xFFFFFFFFFFFFFULL;
+    return static_cast<int16_t>(exp - 1023 + (mant != 0));
+}
+
+// Scalar minimal_kif. Uses rint (FE_TONEAREST) to match Python's round().
 inline void
 minimal_kif_one(double qmin, double qmax, double qstep, int32_t &out_k, int32_t &out_i, int32_t &out_f) {
     if (qmin == 0.0 && qmax == 0.0) {
@@ -28,11 +34,11 @@ minimal_kif_one(double qmin, double qmax, double qstep, int32_t &out_k, int32_t 
     }
     const double safe_step = qstep > 0.0 ? qstep : 1.0;
     const int32_t k = qmin < 0.0 ? 1 : 0;
-    const int32_t fractional = -iceil_log2(static_cast<float>(safe_step));
-    const int64_t int_min = std::llrint(qmin / safe_step);
-    const int64_t int_max = std::llrint(qmax / safe_step);
-    const int64_t bits_arg = std::max(std::abs(int_min), int_max + 1);
-    const int32_t bits = bits_arg > 0 ? iceil_log2(static_cast<float>(bits_arg)) : 0;
+    const int32_t fractional = -iceil_log2(safe_step);
+    const double int_min = std::rint(qmin / safe_step);
+    const double int_max = std::rint(qmax / safe_step);
+    const double bits_arg = std::max(std::abs(int_min), int_max + 1);
+    const int32_t bits = bits_arg > 0 ? iceil_log2(bits_arg) : 0;
     out_k = k;
     out_i = bits - fractional;
     out_f = fractional;
