@@ -594,15 +594,15 @@ class _ArgsortDelayedIndex:
 
 
 @_array_fn(np.sum)
-def _np_sum(*args, **kwargs):
-    return reduce(lambda x, y: x + y, *args, **kwargs)
+def _np_sum(*args, keepdims=False, **kwargs):
+    return reduce(lambda x, y: x + y, *args, keepdims=False, **kwargs)
 
 
 @_array_fn(np.mean)
-def _np_mean(x, axis=None, **kw):
-    r = reduce(lambda a, b: a + b, x, axis=axis)
+def _np_mean(a, **kwargs):
+    r = reduce(lambda _a, _b: _a + _b, a, **kwargs)
     size = r.size if isinstance(r, FVArray) else 1
-    return r * (size / x.size)
+    return r * (size / a.size)
 
 
 @_array_fn(np.amax, np.max)
