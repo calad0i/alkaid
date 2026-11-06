@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
-from quantizers.fixed_point.fixed_point_ops_np import get_fixed_quantizer_np
+from quantizers import fixed_quantize
 
 from ..fixed_variable_array import FVariable
 
@@ -41,8 +41,7 @@ def _quantize(
     overflow_mode: str = 'WRAP',
     round_mode: str = 'TRN',
 ) -> NDArray[np.floating]:
-    q = get_fixed_quantizer_np(round_mode=round_mode, overflow_mode=overflow_mode)
-    return np.where(k + i + f <= 0, 0, q(x, k=k, i=i, f=f))  # type: ignore
+    return fixed_quantize(x, k, i, f, round_mode=round_mode, overflow_mode=overflow_mode)
 
 
 def quantize(
